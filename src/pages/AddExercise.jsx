@@ -19,6 +19,7 @@ const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? '/api'
 const emptyExercise = {
   name: '',
   category: 'Equipment Based',
+  body_part_id: '',
   body_part: 'Shoulders',
   equipment: 'Machine',
   workout_level: 'Beginner',
@@ -41,8 +42,39 @@ const emptyExercise = {
 
 export default function AddExercise({ onBack, exerciseId = null }) {
   const [formData, setFormData] = useState({ ...emptyExercise })
+  const [bodyParts, setBodyParts] = useState([])
   const [isLoading, setIsLoading] = useState(Boolean(exerciseId))
   const [isSubmitting, setIsSubmitting] = useState(false)
+
+  useEffect(() => {
+    let shouldUpdate = true
+
+    const loadBodyParts = async () => {
+      try {
+        const response = await fetch(`${apiBaseUrl}/body-parts`, {
+          headers: {
+            Accept: 'application/json',
+            Authorization: `Bearer ${localStorage.getItem('aurex_admin_token')}`,
+          },
+        })
+        const payload = await response.json()
+
+        if (!response.ok) return
+
+        if (shouldUpdate) {
+          setBodyParts(payload.body_parts || [])
+        }
+      } catch {
+        if (shouldUpdate) setBodyParts([])
+      }
+    }
+
+    loadBodyParts()
+
+    return () => {
+      shouldUpdate = false
+    }
+  }, [])
 
   useEffect(() => {
     if (!exerciseId) return
@@ -75,6 +107,7 @@ export default function AddExercise({ onBack, exerciseId = null }) {
         setFormData({
           name: exercise.name || '',
           category: exercise.category || 'Equipment Based',
+          body_part_id: exercise.body_part_id || '',
           body_part: exercise.body_part || 'Shoulders',
           equipment: exercise.equipment || 'Machine',
           workout_level: exercise.workout_level || 'Beginner',
@@ -178,6 +211,7 @@ export default function AddExercise({ onBack, exerciseId = null }) {
       Object.entries({
         name: formData.name,
         category: formData.category,
+        body_part_id: formData.body_part_id,
         body_part: formData.body_part,
         equipment: formData.equipment,
         workout_level: formData.workout_level,
@@ -310,17 +344,38 @@ export default function AddExercise({ onBack, exerciseId = null }) {
                 />
                 <Select
                   label="Body Part"
-                  value={formData.body_part}
-                  onChange={(value) => updateField('body_part', value)}
-                  options={[
-                    'Shoulders',
-                    'Chest',
-                    'Back',
-                    'Arms',
-                    'Legs',
-                    'Abs',
-                    'Full Body',
-                  ]}
+                  value={formData.body_part_id || formData.body_part}
+                  onChange={(value) => {
+                    const selectedBodyPart = bodyParts.find((item) => item.id === value)
+
+                    if (selectedBodyPart) {
+                      setFormData((current) => ({
+                        ...current,
+                        body_part_id: selectedBodyPart.id,
+                        body_part: selectedBodyPart.name,
+                      }))
+                      return
+                    }
+
+                    setFormData((current) => ({
+                      ...current,
+                      body_part_id: '',
+                      body_part: value,
+                    }))
+                  }}
+                  options={
+                    bodyParts.length
+                      ? bodyParts.map((item) => [item.id, item.name])
+                      : [
+                          'Shoulders',
+                          'Chest',
+                          'Back',
+                          'Arms',
+                          'Legs',
+                          'Abs',
+                          'Full Body',
+                        ]
+                  }
                 />
                 <Select
                   label="Equipment"
@@ -533,11 +588,16 @@ function Select({ label, options, value, onChange }) {
         onChange={(event) => onChange(event.target.value)}
         className="w-full appearance-none bg-[#050505] border border-white/10 rounded-2xl px-4 py-4 text-white outline-none [color-scheme:dark]"
       >
-        {options.map((option) => (
-          <option key={option} className="bg-[#050505] text-white">
-            {option}
-          </option>
-        ))}
+        {options.map((item) => {
+          const optionValue = Array.isArray(item) ? item[0] : item
+          const labelText = Array.isArray(item) ? item[1] : item
+
+          return (
+            <option key={optionValue} value={optionValue} className="bg-[#050505] text-white">
+              {labelText}
+            </option>
+          )
+        })}
       </select>
     </div>
   )

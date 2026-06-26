@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react'
 
 import AddBanner from './pages/AddBanner'
+import AddBodyPart from './pages/AddBodyPart'
 import AddExercise from './pages/AddExercise'
 import AddEquipment from './pages/AddEquipment'
 import AddMember from './pages/AddMember'
@@ -11,6 +12,7 @@ import AddUser from './pages/AddUser'
 import AddWorkout from './pages/AddWorkout'
 import AddWorkoutLevel from './pages/AddWorkoutLevel'
 import Attendance from './pages/Attendance'
+import BodyParts from './pages/BodyParts'
 import Classes from './pages/Classes'
 import AddClass from './pages/AddClass'
 import AddDiet from './pages/AddDiet'
@@ -47,6 +49,7 @@ function App() {
   const [selectedClassId, setSelectedClassId] = useState(null)
   const [selectedTrainerId, setSelectedTrainerId] = useState(null)
   const [selectedExerciseId, setSelectedExerciseId] = useState(null)
+  const [selectedBodyPartId, setSelectedBodyPartId] = useState(null)
   const [selectedLevelId, setSelectedLevelId] = useState(null)
   const [selectedWorkoutId, setSelectedWorkoutId] = useState(null)
   const [selectedDietId, setSelectedDietId] = useState(null)
@@ -210,6 +213,22 @@ function App() {
     return <AddExercise onBack={() => setPage('exercises')} />
   }
 
+  if (page === 'add-body-part') {
+    return <AddBodyPart onBack={() => setPage('body-parts')} />
+  }
+
+  if (page === 'edit-body-part') {
+    return (
+      <AddBodyPart
+        bodyPartId={selectedBodyPartId}
+        onBack={() => {
+          setSelectedBodyPartId(null)
+          setPage('body-parts')
+        }}
+      />
+    )
+  }
+
   if (page === 'edit-exercise') {
     return (
       <AddExercise
@@ -275,6 +294,18 @@ function App() {
       <Exercises
         onNavigate={(nextPage, exerciseId = null) => {
           setSelectedExerciseId(exerciseId)
+          setPage(nextPage)
+        }}
+        onLogout={handleLogout}
+      />
+    )
+  }
+
+  if (page === 'body-parts') {
+    return (
+      <BodyParts
+        onNavigate={(nextPage, bodyPartId = null) => {
+          setSelectedBodyPartId(bodyPartId)
           setPage(nextPage)
         }}
         onLogout={handleLogout}

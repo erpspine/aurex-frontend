@@ -34,6 +34,7 @@ const menuItems = [
   { id: 'plans', name: 'Membership Plans', icon: CreditCard },
   { id: 'trainers', name: 'Trainers', icon: UserCog },
   { id: 'exercises', name: 'Exercises', icon: Dumbbell },
+  { id: 'body-parts', name: 'Body Parts', icon: Wrench },
   { id: 'equipment', name: 'Equipment', icon: Wrench },
   { id: 'workouts', name: 'Workouts', icon: Activity },
   { id: 'levels', name: 'Workout Levels', icon: Trophy },
@@ -644,15 +645,6 @@ function formatCurrency(value) {
   if (!value) return 'Not set'
 
   return `TZS ${Number(value).toLocaleString()}`
-}
-
-function detailRow(label, value) {
-  return `
-    <div style="display:flex;justify-content:space-between;gap:14px;border-bottom:1px solid rgba(255,255,255,0.1);padding:12px 0">
-      <span style="color:#8f8f8f">${escapeHtml(label)}</span>
-      <strong style="color:#fff;text-align:right">${escapeHtml(value || 'Not set')}</strong>
-    </div>
-  `
 }
 
 function escapeHtml(value) {

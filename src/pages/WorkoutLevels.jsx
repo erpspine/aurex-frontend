@@ -35,6 +35,7 @@ const menuItems = [
   { id: 'plans', name: 'Membership Plans', icon: CreditCard },
   { id: 'trainers', name: 'Trainers', icon: UserCog },
   { id: 'exercises', name: 'Exercises', icon: Dumbbell },
+  { id: 'body-parts', name: 'Body Parts', icon: Flame },
   { id: 'equipment', name: 'Equipment', icon: Wrench },
   { id: 'workouts', name: 'Workouts', icon: Activity },
   { id: 'levels', name: 'Workout Levels', icon: Trophy },

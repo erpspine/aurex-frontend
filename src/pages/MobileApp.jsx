@@ -14,6 +14,7 @@ import {
   Plus,
   Settings,
   Smartphone,
+  Target,
   ToggleLeft,
   ToggleRight,
   Trophy,
@@ -33,6 +34,7 @@ const menuItems = [
   { id: 'plans', name: 'Membership Plans', icon: CreditCard },
   { id: 'trainers', name: 'Trainers', icon: UserCog },
   { id: 'exercises', name: 'Exercises', icon: Dumbbell },
+  { id: 'body-parts', name: 'Body Parts', icon: Target },
   { id: 'equipment', name: 'Equipment', icon: Wrench },
   { id: 'workouts', name: 'Workouts', icon: Activity },
   { id: 'levels', name: 'Workout Levels', icon: Trophy },
@@ -812,7 +814,7 @@ function formatBannerDate(value) {
 
 function moduleRoute(name) {
   const routes = {
-    'Body Part Exercises': 'exercises',
+    'Body Part Exercises': 'body-parts',
     'Equipment Exercises': 'exercises',
     Workouts: 'workouts',
     'Workout Levels': 'levels',
@@ -829,6 +831,7 @@ function moduleRouteLabel(name) {
   if (!route) return 'Not linked'
 
   const labels = {
+    'body-parts': 'Body Parts',
     exercises: 'Exercises',
     workouts: 'Workouts',
     levels: 'Workout Levels',
@@ -842,7 +845,7 @@ function moduleRouteLabel(name) {
 function sectionRoute(section) {
   const routes = {
     'Today Workout': 'workouts',
-    'Body Part Exercises': 'exercises',
+    'Body Part Exercises': 'body-parts',
     'Equipment Based Exercises': 'exercises',
     'Popular Workouts': 'workouts',
     'Diet Plan Suggestions': 'diet',

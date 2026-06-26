@@ -14,6 +14,7 @@ import {
   Search,
   Settings,
   Smartphone,
+  Target,
   Trophy,
   TrendingUp,
   UserCog,
@@ -32,6 +33,7 @@ const menuItems = [
   { id: 'plans', name: 'Membership Plans', icon: CreditCard },
   { id: 'trainers', name: 'Trainers', icon: UserCog },
   { id: 'exercises', name: 'Exercises', icon: Dumbbell },
+  { id: 'body-parts', name: 'Body Parts', icon: Target },
   { id: 'equipment', name: 'Equipment', icon: Wrench },
   { id: 'workouts', name: 'Workouts', icon: Activity },
   { id: 'levels', name: 'Workout Levels', icon: Trophy },
@@ -94,7 +96,7 @@ export default function Dashboard({ onNavigate, onLogout }) {
 
   const stats = dashboard?.stats || {}
   const todaySummary = dashboard?.today_summary || {}
-  const performance = dashboard?.performance || []
+  const performance = useMemo(() => dashboard?.performance || [], [dashboard])
   const maxPerformance = useMemo(
     () => Math.max(...performance.map((item) => Number(item.check_ins || 0)), 1),
     [performance],
@@ -318,9 +320,10 @@ export default function Dashboard({ onNavigate, onLogout }) {
 
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
           <ModuleCard
-            title="Exercise Library"
-            desc="Manage body part and equipment-based exercises."
-            icon={Dumbbell}
+            title="Body Parts"
+            desc="Manage body-part categories and images for exercises."
+            icon={Target}
+            onClick={() => onNavigate('body-parts')}
           />
           <ModuleCard
             title="Workout Builder"
@@ -389,16 +392,33 @@ function SummaryItem({ icon: Icon, label, value }) {
   )
 }
 
-function ModuleCard({ title, desc, icon: Icon }) {
-  return (
-    <div className="bg-[#111] border border-white/10 rounded-3xl p-6 hover:border-[#C8A13A]/70 transition group">
+function ModuleCard({ title, desc, icon: Icon, onClick }) {
+  const className =
+    'text-left bg-[#111] border border-white/10 rounded-3xl p-6 hover:border-[#C8A13A]/70 transition group'
+
+  const content = (
+    <>
       <div className="w-12 h-12 rounded-2xl bg-[#C8A13A]/15 flex items-center justify-center mb-5 group-hover:bg-[#C8A13A]">
         <Icon className="text-[#C8A13A] group-hover:text-black" size={22} />
       </div>
 
       <h3 className="text-xl font-bold mb-2">{title}</h3>
       <p className="text-gray-400 text-sm leading-6">{desc}</p>
-    </div>
+    </>
+  )
+
+  if (!onClick) {
+    return <div className={className}>{content}</div>
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={className}
+    >
+      {content}
+    </button>
   )
 }
 
