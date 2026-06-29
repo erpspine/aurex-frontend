@@ -9,6 +9,7 @@ import AddPayment from './pages/AddPayment'
 import AddPlan from './pages/AddPlan'
 import AddTrainer from './pages/AddTrainer'
 import AddUser from './pages/AddUser'
+import EditUser from './pages/EditUser'
 import AddWorkout from './pages/AddWorkout'
 import AddWorkoutLevel from './pages/AddWorkoutLevel'
 import Attendance from './pages/Attendance'
@@ -205,6 +206,15 @@ function App() {
       <AddUser
         onBack={() => setPage('users')}
         onPermissions={() => setPage('permissions')}
+      />
+    )
+  }
+
+  if (page === 'edit-user') {
+    return (
+      <EditUser
+        onBack={() => setPage('users')}
+        onLogout={handleLogout}
       />
     )
   }

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import Swal from 'sweetalert2'
 
 import {
   Activity,
@@ -27,6 +28,9 @@ import {
   UserX,
   Utensils,
   Wrench,
+  X,
+  Save,
+  Shield,
 } from 'lucide-react'
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? '/api'
@@ -74,6 +78,15 @@ export default function UsersPage({ onNavigate, onLogout }) {
   const [searchTerm, setSearchTerm] = useState('')
   const [roleFilter, setRoleFilter] = useState('All Roles')
   const [statusFilter, setStatusFilter] = useState('All Status')
+  const [selectedUser, setSelectedUser] = useState(null)
+  const [showViewModal, setShowViewModal] = useState(false)
+  const [showResetPasswordModal, setShowResetPasswordModal] = useState(false)
+  const [resetPasswordData, setResetPasswordData] = useState({
+    password: '',
+    password_confirmation: '',
+    force_password_change: true,
+  })
+  const [isResettingPassword, setIsResettingPassword] = useState(false)
 
   useEffect(() => {
     let shouldUpdate = true
@@ -121,6 +134,147 @@ export default function UsersPage({ onNavigate, onLogout }) {
       shouldUpdate = false
     }
   }, [onLogout])
+
+  const handleViewUser = (user) => {
+    setSelectedUser(user)
+    setShowViewModal(true)
+  }
+
+  const handleEditUser = (user) => {
+    setSelectedUser(user)
+    // Store user in localStorage for the edit page
+    localStorage.setItem('edit_user_data', JSON.stringify(user))
+    onNavigate('edit-user')
+  }
+
+  const handleResetPassword = (user) => {
+    setSelectedUser(user)
+    setResetPasswordData({
+      password: '',
+      password_confirmation: '',
+      force_password_change: true,
+    })
+    setShowResetPasswordModal(true)
+  }
+
+  const submitResetPassword = async (event) => {
+    event.preventDefault()
+    setIsResettingPassword(true)
+
+    try {
+      const response = await fetch(
+        `${apiBaseUrl}/users/${selectedUser.id}/reset-password`,
+        {
+          method: 'POST',
+          headers: {
+            Accept: 'application/json',
+            Authorization: `Bearer ${localStorage.getItem('aurex_admin_token')}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(resetPasswordData),
+        },
+      )
+
+      const payload = await response.json()
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          onLogout()
+          return
+        }
+
+        const validationMessage = payload.errors
+          ? Object.values(payload.errors).flat().join(' ')
+          : payload.message
+
+        throw new Error(validationMessage || 'Unable to reset password.')
+      }
+
+      setShowResetPasswordModal(false)
+      setSelectedUser(null)
+
+      await Swal.fire({
+        title: 'Password Reset',
+        text: payload.message || 'Password reset successfully.',
+        icon: 'success',
+        background: '#101010',
+        color: '#ffffff',
+        confirmButtonColor: '#C8A13A',
+      })
+    } catch (caughtError) {
+      await Swal.fire({
+        title: 'Reset Failed',
+        text: caughtError.message || 'Unable to reset password.',
+        icon: 'error',
+        background: '#101010',
+        color: '#ffffff',
+        confirmButtonColor: '#C8A13A',
+      })
+    } finally {
+      setIsResettingPassword(false)
+    }
+  }
+
+  const handleDeleteUser = async (user) => {
+    const result = await Swal.fire({
+      title: 'Delete User?',
+      text: `Are you sure you want to delete ${user.name}? This action cannot be undone.`,
+      icon: 'warning',
+      showCancelButton: true,
+      background: '#101010',
+      color: '#ffffff',
+      confirmButtonColor: '#dc2626',
+      cancelButtonColor: '#6b7280',
+      confirmButtonText: 'Yes, delete',
+      cancelButtonText: 'Cancel',
+    })
+
+    if (!result.isConfirmed) {
+      return
+    }
+
+    try {
+      const response = await fetch(`${apiBaseUrl}/users/${user.id}`, {
+        method: 'DELETE',
+        headers: {
+          Accept: 'application/json',
+          Authorization: `Bearer ${localStorage.getItem('aurex_admin_token')}`,
+        },
+      })
+
+      const payload = await response.json()
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          onLogout()
+          return
+        }
+
+        throw new Error(payload.message || 'Unable to delete user.')
+      }
+
+      // Remove user from list
+      setUsers((current) => current.filter((u) => u.id !== user.id))
+
+      await Swal.fire({
+        title: 'User Deleted',
+        text: payload.message || 'User deleted successfully.',
+        icon: 'success',
+        background: '#101010',
+        color: '#ffffff',
+        confirmButtonColor: '#C8A13A',
+      })
+    } catch (caughtError) {
+      await Swal.fire({
+        title: 'Delete Failed',
+        text: caughtError.message || 'Unable to delete user.',
+        icon: 'error',
+        background: '#101010',
+        color: '#ffffff',
+        confirmButtonColor: '#C8A13A',
+      })
+    }
+  }
 
   const filteredUsers = useMemo(() => {
     const normalizedSearch = searchTerm.trim().toLowerCase()
@@ -430,10 +584,27 @@ export default function UsersPage({ onNavigate, onLogout }) {
 
                     <td className="p-5">
                       <div className="flex justify-end gap-2">
-                        <ActionButton icon={Eye} />
-                        <ActionButton icon={Edit} />
-                        <ActionButton icon={Lock} />
-                        <ActionButton icon={Trash2} danger />
+                        <ActionButton
+                          icon={Eye}
+                          onClick={() => handleViewUser(user)}
+                          title="View Details"
+                        />
+                        <ActionButton
+                          icon={Edit}
+                          onClick={() => handleEditUser(user)}
+                          title="Edit User"
+                        />
+                        <ActionButton
+                          icon={Lock}
+                          onClick={() => handleResetPassword(user)}
+                          title="Reset Password"
+                        />
+                        <ActionButton
+                          icon={Trash2}
+                          onClick={() => handleDeleteUser(user)}
+                          title="Delete User"
+                          danger
+                        />
                       </div>
                     </td>
                   </tr>
@@ -463,6 +634,249 @@ export default function UsersPage({ onNavigate, onLogout }) {
             onClick={() => onNavigate('permissions')}
           />
         </div>
+
+        {/* View User Modal */}
+        {showViewModal && selectedUser && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+            <div className="bg-gradient-to-br from-[#111] to-[#0A0A0A] border border-white/10 rounded-3xl max-w-3xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
+              {/* Header */}
+              <div className="bg-[#0A0A0A] border-b border-white/10 p-6 flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="w-16 h-16 rounded-2xl bg-[#C8A13A] text-black font-black flex items-center justify-center text-3xl">
+                    {selectedUser.name.charAt(0)}
+                  </div>
+                  <div>
+                    <h2 className="text-2xl font-black">{selectedUser.name}</h2>
+                    <p className="text-gray-400 text-sm">{selectedUser.email}</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowViewModal(false)}
+                  className="w-10 h-10 rounded-xl flex items-center justify-center border border-white/10 text-gray-400 hover:text-white hover:bg-white/5 transition"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              {/* Content */}
+              <div className="p-6 space-y-6">
+                {/* Status & Security Cards */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="bg-[#0A0A0A] border border-white/10 rounded-2xl p-4">
+                    <p className="text-gray-400 text-xs mb-2">Status</p>
+                    <span
+                      className={`inline-flex px-3 py-1 rounded-full text-xs font-bold ${
+                        selectedUser.status === 'Active'
+                          ? 'bg-green-500/15 text-green-400'
+                          : 'bg-red-500/15 text-red-400'
+                      }`}
+                    >
+                      {selectedUser.status}
+                    </span>
+                  </div>
+
+                  <div className="bg-[#0A0A0A] border border-white/10 rounded-2xl p-4">
+                    <p className="text-gray-400 text-xs mb-2">Role</p>
+                    <span className="inline-flex px-3 py-1 rounded-full text-xs font-bold bg-[#C8A13A]/15 text-[#C8A13A]">
+                      {selectedUser.role}
+                    </span>
+                  </div>
+
+                  <div className="bg-[#0A0A0A] border border-white/10 rounded-2xl p-4">
+                    <p className="text-gray-400 text-xs mb-2">2FA</p>
+                    <span className={`inline-flex px-3 py-1 rounded-full text-xs font-bold ${
+                      selectedUser.two_factor_enabled
+                        ? 'bg-blue-500/15 text-blue-400'
+                        : 'bg-gray-500/15 text-gray-400'
+                    }`}>
+                      {selectedUser.two_factor_enabled ? 'Enabled' : 'Disabled'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Details Grid */}
+                <div className="bg-[#0A0A0A] border border-white/10 rounded-2xl p-5">
+                  <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
+                    <UserCog size={20} className="text-[#C8A13A]" />
+                    User Information
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <DetailItem label="Name" value={selectedUser.name} />
+                    <DetailItem label="Email" value={selectedUser.email} />
+                    <DetailItem label="Phone" value={selectedUser.phone || 'Not provided'} />
+                    <DetailItem label="User Type" value={selectedUser.user_type} />
+                    <DetailItem label="Role" value={selectedUser.role} />
+                    <DetailItem label="Status" value={selectedUser.status} />
+                  </div>
+                </div>
+
+                {/* Account Info */}
+                <div className="bg-[#0A0A0A] border border-white/10 rounded-2xl p-5">
+                  <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
+                    <Shield size={20} className="text-[#C8A13A]" />
+                    Account Details
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <DetailItem
+                      label="Created"
+                      value={formatDate(selectedUser.created_at)}
+                    />
+                    <DetailItem
+                      label="Last Updated"
+                      value={formatDate(selectedUser.updated_at)}
+                    />
+                    <DetailItem
+                      label="User ID"
+                      value={selectedUser.id || 'N/A'}
+                    />
+                    <DetailItem
+                      label="Force Password Change"
+                      value={selectedUser.force_password_change ? 'Yes' : 'No'}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer Actions */}
+              <div className="bg-[#0A0A0A] border-t border-white/10 p-6 flex justify-between items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowViewModal(false)
+                    handleResetPassword(selectedUser)
+                  }}
+                  className="flex items-center gap-2 px-5 py-3 rounded-2xl border border-white/10 text-gray-300 hover:text-[#C8A13A] hover:border-[#C8A13A] transition"
+                >
+                  <Lock size={18} />
+                  Reset Password
+                </button>
+
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowViewModal(false)
+                      handleEditUser(selectedUser)
+                    }}
+                    className="flex items-center gap-2 px-5 py-3 rounded-2xl border border-[#C8A13A]/40 text-[#C8A13A] hover:bg-[#C8A13A]/10 transition"
+                  >
+                    <Edit size={18} />
+                    Edit User
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowViewModal(false)}
+                    className="bg-[#C8A13A] text-black font-bold px-6 py-3 rounded-2xl hover:bg-[#B89130] transition"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Reset Password Modal */}
+        {showResetPasswordModal && selectedUser && (
+          <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50">
+            <div className="bg-[#111] border border-white/10 rounded-3xl p-6 max-w-md w-full">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-2xl font-bold">Reset Password</h2>
+                <button
+                  type="button"
+                  onClick={() => setShowResetPasswordModal(false)}
+                  className="w-10 h-10 rounded-xl flex items-center justify-center border border-white/10 text-gray-400 hover:text-white hover:bg-white/5"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              <p className="text-gray-400 mb-6">
+                Reset password for <span className="text-white font-bold">{selectedUser.name}</span>
+              </p>
+
+              <form onSubmit={submitResetPassword} className="space-y-4">
+                <div>
+                  <label className="text-gray-400 text-sm block mb-2">
+                    New Password
+                  </label>
+                  <input
+                    type="password"
+                    required
+                    minLength={8}
+                    value={resetPasswordData.password}
+                    onChange={(e) =>
+                      setResetPasswordData({
+                        ...resetPasswordData,
+                        password: e.target.value,
+                      })
+                    }
+                    className="w-full bg-[#050505] border border-white/10 rounded-2xl px-4 py-3 text-white outline-none focus:border-[#C8A13A]"
+                    placeholder="Enter new password"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-gray-400 text-sm block mb-2">
+                    Confirm Password
+                  </label>
+                  <input
+                    type="password"
+                    required
+                    minLength={8}
+                    value={resetPasswordData.password_confirmation}
+                    onChange={(e) =>
+                      setResetPasswordData({
+                        ...resetPasswordData,
+                        password_confirmation: e.target.value,
+                      })
+                    }
+                    className="w-full bg-[#050505] border border-white/10 rounded-2xl px-4 py-3 text-white outline-none focus:border-[#C8A13A]"
+                    placeholder="Confirm new password"
+                  />
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <input
+                    type="checkbox"
+                    id="force_password_change"
+                    checked={resetPasswordData.force_password_change}
+                    onChange={(e) =>
+                      setResetPasswordData({
+                        ...resetPasswordData,
+                        force_password_change: e.target.checked,
+                      })
+                    }
+                    className="accent-[#C8A13A]"
+                  />
+                  <label htmlFor="force_password_change" className="text-gray-300 text-sm">
+                    Force password change on next login
+                  </label>
+                </div>
+
+                <div className="flex gap-3 mt-6">
+                  <button
+                    type="button"
+                    onClick={() => setShowResetPasswordModal(false)}
+                    className="flex-1 border border-white/10 text-gray-300 px-5 py-3 rounded-2xl hover:border-[#C8A13A]"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isResettingPassword}
+                    className="flex-1 bg-[#C8A13A] disabled:opacity-60 text-black font-bold px-5 py-3 rounded-2xl flex items-center justify-center gap-2"
+                  >
+                    <Save size={18} />
+                    {isResettingPassword ? 'Resetting...' : 'Reset Password'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
       </main>
     </div>
   )
@@ -510,10 +924,12 @@ function RoleCard({ title, desc, users, onClick }) {
   )
 }
 
-function ActionButton({ icon: Icon, danger = false }) {
+function ActionButton({ icon: Icon, danger = false, onClick, title }) {
   return (
     <button
       type="button"
+      onClick={onClick}
+      title={title}
       className={`w-10 h-10 rounded-xl flex items-center justify-center border border-white/10 ${
         danger
           ? 'text-red-400 hover:bg-red-500/10'
@@ -522,5 +938,14 @@ function ActionButton({ icon: Icon, danger = false }) {
     >
       <Icon size={17} />
     </button>
+  )
+}
+
+function DetailItem({ label, value }) {
+  return (
+    <div>
+      <label className="text-gray-400 text-xs uppercase tracking-wider">{label}</label>
+      <p className="text-white font-bold mt-1 break-words">{value}</p>
+    </div>
   )
 }
