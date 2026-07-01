@@ -19,6 +19,7 @@ const emptyMember = {
   full_name: '',
   phone: '',
   email: '',
+  access_code: '',
   gender: 'Male',
   date_of_birth: '',
   address: '',
@@ -97,6 +98,7 @@ export default function AddMember({ onBack, memberId = null }) {
           full_name: member.full_name || '',
           phone: member.phone || '',
           email: member.email || '',
+          access_code: member.access_code || '',
           gender: member.gender || 'Male',
           date_of_birth: dateInputValue(member.date_of_birth),
           address: member.address || '',
@@ -191,6 +193,7 @@ export default function AddMember({ onBack, memberId = null }) {
         body: JSON.stringify({
           ...formData,
           membership_plan_id: formData.membership_plan_id || null,
+          access_code: formData.access_code.trim() || null,
           date_of_birth: formData.date_of_birth || null,
           start_date: formData.start_date || null,
           expiry_date: formData.expiry_date || null,
@@ -351,6 +354,15 @@ export default function AddMember({ onBack, memberId = null }) {
                   updateField('membership_status', event.target.value)
                 }
                 options={['Active', 'Pending', 'Expired', 'Suspended']}
+              />
+              <Input
+                icon={CreditCard}
+                label="Turnstile Card Number"
+                placeholder="Numeric card number, e.g. 100245"
+                value={formData.access_code}
+                onChange={(event) =>
+                  updateField('access_code', event.target.value)
+                }
               />
               <Input
                 icon={Calendar}
