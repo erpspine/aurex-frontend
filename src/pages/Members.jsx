@@ -111,6 +111,7 @@ export default function Members({ onNavigate, onLogout }) {
       return (
         member.full_name?.toLowerCase().includes(search) ||
         member.phone?.toLowerCase().includes(search) ||
+        member.access_code?.includes(search) ||
         member.membership_plan?.name?.toLowerCase().includes(search)
       )
     })
@@ -168,6 +169,7 @@ export default function Members({ onNavigate, onLogout }) {
             ${detailCard('Phone', member.phone)}
             ${detailCard('Email', member.email || 'Not set')}
             ${detailCard('Membership Plan', member.membership_plan?.name || 'No plan')}
+            ${detailCard('Turnstile Card', member.access_code || 'Not linked')}
             ${detailCard('Expiry Date', formatDate(member.expiry_date))}
             ${detailCard('Start Date', formatDate(member.start_date))}
             ${detailCard('Amount Paid', formatCurrency(member.amount_paid))}
@@ -207,6 +209,82 @@ export default function Members({ onNavigate, onLogout }) {
         popup: 'aurex-member-modal',
       },
     })
+  }
+
+  const handleLinkCard = async (member) => {
+    const result = await Swal.fire({
+      title: member.access_code ? 'Replace turnstile card' : 'Link turnstile card',
+      text: `Assign a numeric card number to ${member.full_name}.`,
+      input: 'text',
+      inputValue: member.access_code || '',
+      inputPlaceholder: 'Example: 100245',
+      showCancelButton: true,
+      showDenyButton: Boolean(member.access_code),
+      confirmButtonText: member.access_code ? 'Replace card' : 'Link card',
+      denyButtonText: 'Unlink card',
+      cancelButtonText: 'Cancel',
+      background: '#101010',
+      color: '#ffffff',
+      confirmButtonColor: '#C8A13A',
+      denyButtonColor: '#dc2626',
+      cancelButtonColor: '#2a2a2a',
+      inputValidator: (value) => {
+        const card = value.trim()
+        if (!/^[1-9]\d{0,9}$/.test(card)) {
+          return 'Enter a numeric card number without leading zeros.'
+        }
+        if (Number(card) > 4294967295) {
+          return 'Card number must not exceed 4294967295.'
+        }
+        return undefined
+      },
+    })
+
+    if (!result.isConfirmed && !result.isDenied) return
+
+    const accessCode = result.isDenied ? null : result.value.trim()
+
+    try {
+      const response = await fetch(`${apiBaseUrl}/members/${member.id}/card`, {
+        method: 'PUT',
+        headers: {
+          Accept: 'application/json',
+          Authorization: `Bearer ${localStorage.getItem('aurex_admin_token')}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ access_code: accessCode }),
+      })
+      const payload = await response.json()
+
+      if (!response.ok) {
+        const validationMessage = payload.errors
+          ? Object.values(payload.errors).flat().join(' ')
+          : payload.message
+        throw new Error(validationMessage || 'Unable to update turnstile card.')
+      }
+
+      setMembers((current) =>
+        current.map((item) => (item.id === member.id ? payload.member : item)),
+      )
+
+      await Swal.fire({
+        title: accessCode ? 'Card linked' : 'Card unlinked',
+        text: payload.message,
+        icon: 'success',
+        background: '#101010',
+        color: '#ffffff',
+        confirmButtonColor: '#C8A13A',
+      })
+    } catch (caughtError) {
+      await Swal.fire({
+        title: 'Card update failed',
+        text: caughtError.message || 'Unable to update turnstile card.',
+        icon: 'error',
+        background: '#101010',
+        color: '#ffffff',
+        confirmButtonColor: '#C8A13A',
+      })
+    }
   }
 
   const handleDeleteMember = async (member) => {
@@ -397,12 +475,13 @@ export default function Members({ onNavigate, onLogout }) {
 
         <div className="bg-[#111] border border-white/10 rounded-3xl overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[900px] text-left">
+            <table className="w-full min-w-[1050px] text-left">
               <thead className="bg-[#0A0A0A] text-gray-400 text-sm">
                 <tr>
                   <th className="p-5">Member</th>
                   <th className="p-5">Plan</th>
                   <th className="p-5">Status</th>
+                  <th className="p-5">Access Card</th>
                   <th className="p-5">Expiry Date</th>
                   <th className="p-5">Payment</th>
                   <th className="p-5 text-right">Actions</th>
@@ -412,7 +491,7 @@ export default function Members({ onNavigate, onLogout }) {
               <tbody>
                 {isLoading && (
                   <tr>
-                    <td className="p-8 text-center text-gray-400" colSpan="6">
+                    <td className="p-8 text-center text-gray-400" colSpan="7">
                       Loading members...
                     </td>
                   </tr>
@@ -420,7 +499,7 @@ export default function Members({ onNavigate, onLogout }) {
 
                 {!isLoading && error && (
                   <tr>
-                    <td className="p-8 text-center text-red-300" colSpan="6">
+                    <td className="p-8 text-center text-red-300" colSpan="7">
                       {error}
                     </td>
                   </tr>
@@ -428,7 +507,7 @@ export default function Members({ onNavigate, onLogout }) {
 
                 {!isLoading && !error && filteredMembers.length === 0 && (
                   <tr>
-                    <td className="p-8 text-center text-gray-400" colSpan="6">
+                    <td className="p-8 text-center text-gray-400" colSpan="7">
                       No members found.
                     </td>
                   </tr>
@@ -449,6 +528,19 @@ export default function Members({ onNavigate, onLogout }) {
                           <p className="text-gray-500 text-sm">{member.phone}</p>
                         </div>
                       </div>
+                    </td>
+
+                    <td className="p-5">
+                      {member.access_code ? (
+                        <div>
+                          <div className="font-bold text-[#C8A13A]">
+                            {member.access_code}
+                          </div>
+                          <div className="text-xs text-green-400 mt-1">Linked</div>
+                        </div>
+                      ) : (
+                        <span className="text-sm text-gray-500">Not linked</span>
+                      )}
                     </td>
 
                     <td className="p-5 text-gray-300">
@@ -492,6 +584,11 @@ export default function Members({ onNavigate, onLogout }) {
                         <ActionButton
                           icon={Edit}
                           onClick={() => onNavigate('edit-member', member.id)}
+                        />
+                        <ActionButton
+                          icon={CreditCard}
+                          title={member.access_code ? 'Replace card' : 'Link card'}
+                          onClick={() => handleLinkCard(member)}
                         />
                         <ActionButton
                           icon={Trash2}
@@ -584,10 +681,11 @@ function StatCard({ icon: Icon, title, value }) {
   )
 }
 
-function ActionButton({ icon: Icon, danger = false, onClick }) {
+function ActionButton({ icon: Icon, danger = false, onClick, title }) {
   return (
     <button
       type="button"
+      title={title}
       onClick={onClick}
       className={`w-10 h-10 rounded-xl flex items-center justify-center border border-white/10 ${
         danger
