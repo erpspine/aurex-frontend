@@ -210,6 +210,20 @@ export default function BodyParts({ onNavigate, onLogout }) {
     }
   }
 
+  const handlePreviewImage = (item) => {
+    if (!item.image_url) return
+
+    Swal.fire({
+      title: escapeHtml(item.name),
+      html: `<div style="display:flex;justify-content:center"><img src="${escapeHtml(item.image_url)}" alt="${escapeHtml(item.name)}" style="max-width:100%;max-height:75vh;border-radius:16px;object-fit:contain" /></div>`,
+      background: '#101010',
+      color: '#ffffff',
+      confirmButtonColor: '#C8A13A',
+      confirmButtonText: 'Close',
+      width: 980,
+    })
+  }
+
   return (
     <div className="min-h-screen bg-[#050505] text-white flex">
       <aside className="hidden lg:flex w-72 bg-[#090909] border-r border-white/10 p-5 flex-col">
@@ -358,11 +372,19 @@ export default function BodyParts({ onNavigate, onLogout }) {
                 className="bg-[#111] border border-white/10 rounded-3xl overflow-hidden hover:border-[#C8A13A]/60 transition"
               >
                 {item.image_url ? (
-                  <img
-                    src={item.image_url}
-                    alt={item.name}
-                    className="h-44 w-full object-cover"
-                  />
+                  <button
+                    type="button"
+                    onClick={() => handlePreviewImage(item)}
+                    className="block h-44 w-full overflow-hidden group"
+                    title={`View full image for ${item.name}`}
+                    aria-label={`View full image for ${item.name}`}
+                  >
+                    <img
+                      src={item.image_url}
+                      alt={item.name}
+                      className="h-44 w-full object-cover transition duration-200 group-hover:scale-105"
+                    />
+                  </button>
                 ) : (
                   <div className="h-44 bg-[#050505] flex items-center justify-center text-gray-600">
                     <Image size={38} />
