@@ -8,8 +8,10 @@ import {
   Building2,
   CalendarDays,
   ClipboardList,
+  Copy,
   CreditCard,
   Dumbbell,
+  RefreshCw,
   LayoutDashboard,
   LogOut,
   Mail,
@@ -27,6 +29,7 @@ import {
   UserCog,
   Users,
   Utensils,
+  Trash2,
   Wrench,
 } from 'lucide-react'
 
@@ -58,6 +61,7 @@ const settingTabs = [
   'Payments',
   'Notifications',
   'Users & Roles',
+  'Sync Agent Tokens',
   'Security',
 ]
 
@@ -123,6 +127,21 @@ export default function Settings({ onNavigate, onLogout }) {
     password_confirmation: '',
   })
   const [isChangingPassword, setIsChangingPassword] = useState(false)
+  const [tokens, setTokens] = useState([])
+  const [hasLoadedTokens, setHasLoadedTokens] = useState(false)
+  const [isLoadingTokens, setIsLoadingTokens] = useState(false)
+  const [isCreatingToken, setIsCreatingToken] = useState(false)
+  const [revokingTokenId, setRevokingTokenId] = useState(null)
+  const [issuedToken, setIssuedToken] = useState('')
+  const [tokenForm, setTokenForm] = useState({
+    name: 'Sync Agent',
+    token_type: 'service',
+    scopes: {
+      sync: true,
+      turnstile: false,
+    },
+    expires_at: '',
+  })
 
   useEffect(() => {
     let shouldUpdate = true
@@ -173,6 +192,14 @@ export default function Settings({ onNavigate, onLogout }) {
       shouldUpdate = false
     }
   }, [onLogout])
+
+  useEffect(() => {
+    if (activeTab !== 'Sync Agent Tokens' || hasLoadedTokens) {
+      return
+    }
+
+    loadTokens()
+  }, [activeTab, hasLoadedTokens])
 
   const updateSetting = (section, field, value) => {
     setSettings((current) => ({
@@ -298,6 +325,261 @@ export default function Settings({ onNavigate, onLogout }) {
       })
     } finally {
       setIsChangingPassword(false)
+    }
+  }
+
+  const updateTokenForm = (field, value) => {
+    setTokenForm((current) => ({
+      ...current,
+      [field]: value,
+    }))
+  }
+
+  const updateTokenScope = (scope, checked) => {
+    setTokenForm((current) => ({
+      ...current,
+      scopes: {
+        ...current.scopes,
+        [scope]: checked,
+      },
+    }))
+  }
+
+  const selectedScopes = Object.entries(tokenForm.scopes)
+    .filter(([, enabled]) => enabled)
+    .map(([scope]) => scope)
+
+  const loadTokens = async () => {
+    setIsLoadingTokens(true)
+
+    try {
+      const response = await fetch(`${apiBaseUrl}/api-tokens`, {
+        headers: {
+          Accept: 'application/json',
+          Authorization: `Bearer ${localStorage.getItem('aurex_admin_token')}`,
+        },
+      })
+
+      const payload = await response.json()
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          onLogout()
+          return
+        }
+
+        if (response.status === 403) {
+          throw new Error('Only Admin users can manage synchronization tokens.')
+        }
+
+        throw new Error(payload.message || 'Unable to load API tokens.')
+      }
+
+      setTokens(payload.tokens || [])
+      setHasLoadedTokens(true)
+    } catch (caughtError) {
+      await Swal.fire({
+        title: 'Load failed',
+        text: caughtError.message || 'Unable to load API tokens.',
+        icon: 'error',
+        background: '#101010',
+        color: '#ffffff',
+        confirmButtonColor: '#C8A13A',
+      })
+    } finally {
+      setIsLoadingTokens(false)
+    }
+  }
+
+  const handleCreateToken = async () => {
+    if (!tokenForm.name.trim()) {
+      await Swal.fire({
+        title: 'Name required',
+        text: 'Please provide a token name.',
+        icon: 'warning',
+        background: '#101010',
+        color: '#ffffff',
+        confirmButtonColor: '#C8A13A',
+      })
+      return
+    }
+
+    if (tokenForm.token_type === 'service' && selectedScopes.length === 0) {
+      await Swal.fire({
+        title: 'Scope required',
+        text: 'Choose at least one scope for service tokens.',
+        icon: 'warning',
+        background: '#101010',
+        color: '#ffffff',
+        confirmButtonColor: '#C8A13A',
+      })
+      return
+    }
+
+    setIsCreatingToken(true)
+
+    try {
+      const response = await fetch(`${apiBaseUrl}/api-tokens`, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          Authorization: `Bearer ${localStorage.getItem('aurex_admin_token')}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: tokenForm.name.trim(),
+          token_type: tokenForm.token_type,
+          scopes: tokenForm.token_type === 'service' ? selectedScopes : [],
+          expires_at: tokenForm.expires_at || null,
+        }),
+      })
+
+      const payload = await response.json()
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          onLogout()
+          return
+        }
+
+        const validationMessage = payload.errors
+          ? Object.values(payload.errors).flat().join(' ')
+          : payload.message
+
+        throw new Error(validationMessage || 'Unable to create token.')
+      }
+
+      setIssuedToken(payload.token || '')
+      setTokenForm((current) => ({
+        ...current,
+        name: 'Sync Agent',
+        scopes: {
+          sync: true,
+          turnstile: false,
+        },
+        expires_at: '',
+      }))
+
+      await loadTokens()
+
+      await Swal.fire({
+        title: 'Token created',
+        text: 'Copy the token now. It is only shown once.',
+        icon: 'success',
+        background: '#101010',
+        color: '#ffffff',
+        confirmButtonColor: '#C8A13A',
+      })
+    } catch (caughtError) {
+      await Swal.fire({
+        title: 'Create failed',
+        text: caughtError.message || 'Unable to create token.',
+        icon: 'error',
+        background: '#101010',
+        color: '#ffffff',
+        confirmButtonColor: '#C8A13A',
+      })
+    } finally {
+      setIsCreatingToken(false)
+    }
+  }
+
+  const handleRevokeToken = async (token) => {
+    const confirmation = await Swal.fire({
+      title: 'Revoke token?',
+      text: `This will immediately disable "${token.name}".`,
+      icon: 'warning',
+      background: '#101010',
+      color: '#ffffff',
+      showCancelButton: true,
+      confirmButtonColor: '#C8A13A',
+      cancelButtonColor: '#333333',
+      confirmButtonText: 'Revoke',
+    })
+
+    if (!confirmation.isConfirmed) {
+      return
+    }
+
+    setRevokingTokenId(token.id)
+
+    try {
+      const response = await fetch(`${apiBaseUrl}/api-tokens/${token.id}`, {
+        method: 'DELETE',
+        headers: {
+          Accept: 'application/json',
+          Authorization: `Bearer ${localStorage.getItem('aurex_admin_token')}`,
+        },
+      })
+      const payload = await response.json()
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          onLogout()
+          return
+        }
+
+        throw new Error(payload.message || 'Unable to revoke token.')
+      }
+
+      setTokens((current) =>
+        current.map((item) =>
+          item.id === token.id
+            ? {
+                ...item,
+                revoked_at: new Date().toISOString(),
+              }
+            : item,
+        ),
+      )
+
+      await Swal.fire({
+        title: 'Token revoked',
+        text: payload.message || 'API token revoked successfully.',
+        icon: 'success',
+        background: '#101010',
+        color: '#ffffff',
+        confirmButtonColor: '#C8A13A',
+      })
+    } catch (caughtError) {
+      await Swal.fire({
+        title: 'Revoke failed',
+        text: caughtError.message || 'Unable to revoke token.',
+        icon: 'error',
+        background: '#101010',
+        color: '#ffffff',
+        confirmButtonColor: '#C8A13A',
+      })
+    } finally {
+      setRevokingTokenId(null)
+    }
+  }
+
+  const handleCopyIssuedToken = async () => {
+    if (!issuedToken) {
+      return
+    }
+
+    try {
+      await navigator.clipboard.writeText(issuedToken)
+
+      await Swal.fire({
+        title: 'Token copied',
+        text: 'Use this value as Cloud.Token in the synchronizing agent.',
+        icon: 'success',
+        background: '#101010',
+        color: '#ffffff',
+        confirmButtonColor: '#C8A13A',
+      })
+    } catch {
+      await Swal.fire({
+        title: 'Copy failed',
+        text: 'Copying is blocked by the browser. Please copy it manually.',
+        icon: 'warning',
+        background: '#101010',
+        color: '#ffffff',
+        confirmButtonColor: '#C8A13A',
+      })
     }
   }
 
@@ -780,6 +1062,146 @@ export default function Settings({ onNavigate, onLogout }) {
                 </Section>
               </>
             )}
+
+            {activeTab === 'Sync Agent Tokens' && (
+              <>
+                <Section title="Create Sync Token" icon={ShieldCheck}>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    <Input
+                      label="Token Name"
+                      value={tokenForm.name}
+                      onChange={(value) => updateTokenForm('name', value)}
+                    />
+                    <Select
+                      label="Token Type"
+                      value={tokenForm.token_type}
+                      onChange={(value) => updateTokenForm('token_type', value)}
+                      options={['service', 'dashboard']}
+                    />
+                    <Input
+                      label="Expiry Date (Optional)"
+                      type="date"
+                      value={tokenForm.expires_at}
+                      onChange={(value) => updateTokenForm('expires_at', value)}
+                    />
+                  </div>
+
+                  <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <Toggle
+                      label="Allow sync endpoints"
+                      checked={tokenForm.scopes.sync}
+                      onChange={(value) => updateTokenScope('sync', value)}
+                    />
+                    <Toggle
+                      label="Allow turnstile endpoints"
+                      checked={tokenForm.scopes.turnstile}
+                      onChange={(value) => updateTokenScope('turnstile', value)}
+                    />
+                  </div>
+
+                  <div className="mt-5 flex flex-col sm:flex-row gap-3">
+                    <button
+                      type="button"
+                      onClick={handleCreateToken}
+                      disabled={isCreatingToken}
+                      className="bg-[#C8A13A] disabled:opacity-60 text-black font-bold px-5 py-3 rounded-2xl"
+                    >
+                      {isCreatingToken ? 'Creating...' : 'Create Token'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={loadTokens}
+                      disabled={isLoadingTokens}
+                      className="bg-white/5 border border-white/15 text-white font-semibold px-5 py-3 rounded-2xl flex items-center justify-center gap-2"
+                    >
+                      <RefreshCw size={16} />
+                      Refresh List
+                    </button>
+                  </div>
+
+                  {issuedToken && (
+                    <div className="mt-6 p-4 rounded-2xl border border-[#C8A13A]/40 bg-[#0a0a0a]">
+                      <p className="text-[#C8A13A] font-bold">Copy this token now</p>
+                      <p className="text-gray-400 text-sm mt-1">
+                        This plain token is shown once. Save it in your synchronizing agent as Cloud.Token.
+                      </p>
+                      <div className="mt-3 p-3 bg-black/40 rounded-xl border border-white/10 break-all text-xs sm:text-sm font-mono text-gray-200">
+                        {issuedToken}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleCopyIssuedToken}
+                        className="mt-3 bg-[#C8A13A] text-black font-bold px-4 py-2 rounded-xl inline-flex items-center gap-2"
+                      >
+                        <Copy size={15} />
+                        Copy Token
+                      </button>
+                    </div>
+                  )}
+                </Section>
+
+                <Section title="Active & Revoked Tokens" icon={KeyRound}>
+                  {isLoadingTokens ? (
+                    <div className="text-gray-400">Loading tokens...</div>
+                  ) : tokens.length === 0 ? (
+                    <div className="text-gray-400">No API tokens created yet.</div>
+                  ) : (
+                    <div className="space-y-3">
+                      {tokens.map((token) => {
+                        const isRevoked = Boolean(token.revoked_at)
+
+                        return (
+                          <div
+                            key={token.id}
+                            className="p-4 rounded-2xl border border-white/10 bg-[#0a0a0a]"
+                          >
+                            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                              <div>
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <h4 className="font-bold text-white">{token.name}</h4>
+                                  <span className="text-xs px-2 py-1 rounded-full bg-[#C8A13A]/20 text-[#C8A13A] uppercase">
+                                    {token.token_type || 'dashboard'}
+                                  </span>
+                                  {isRevoked ? (
+                                    <span className="text-xs px-2 py-1 rounded-full bg-red-500/20 text-red-300 uppercase">
+                                      Revoked
+                                    </span>
+                                  ) : (
+                                    <span className="text-xs px-2 py-1 rounded-full bg-emerald-500/20 text-emerald-300 uppercase">
+                                      Active
+                                    </span>
+                                  )}
+                                </div>
+
+                                <p className="text-gray-400 text-sm mt-2">
+                                  Scopes: {(token.scopes || []).length > 0 ? token.scopes.join(', ') : 'None'}
+                                </p>
+                                <p className="text-gray-500 text-xs mt-1">
+                                  Last used: {token.last_used_at ? formatDateTime(token.last_used_at) : 'Never'}
+                                </p>
+                                <p className="text-gray-500 text-xs mt-1">
+                                  Expires: {token.expires_at ? formatDateTime(token.expires_at) : 'No expiry'}
+                                </p>
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() => handleRevokeToken(token)}
+                                disabled={isRevoked || revokingTokenId === token.id}
+                                className="bg-red-500/15 border border-red-400/40 disabled:opacity-40 text-red-200 font-semibold px-4 py-2 rounded-xl inline-flex items-center gap-2"
+                              >
+                                <Trash2 size={15} />
+                                {revokingTokenId === token.id ? 'Revoking...' : 'Revoke'}
+                              </button>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </Section>
+              </>
+            )}
           </div>
         </div>
       </main>
@@ -892,6 +1314,14 @@ function booleanToYesNo(value) {
 
 function yesNoToBoolean(value) {
   return value === 'Yes'
+}
+
+function formatDateTime(value) {
+  try {
+    return new Date(value).toLocaleString()
+  } catch {
+    return value
+  }
 }
 
 function mergeSettings(defaults, incoming) {
