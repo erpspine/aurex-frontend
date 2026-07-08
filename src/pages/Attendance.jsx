@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
-import Swal from 'sweetalert2'
+import { useEffect, useMemo, useState } from "react";
+import Swal from "sweetalert2";
 
 import {
   Activity,
@@ -24,155 +24,166 @@ import {
   UserX,
   Utensils,
   Wrench,
-} from 'lucide-react'
+} from "lucide-react";
 
-const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? '/api'
+const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? "/api";
 
 const menuItems = [
-  { id: 'dashboard', name: 'Dashboard', icon: LayoutDashboard },
-  { id: 'members', name: 'Members', icon: Users },
-  { id: 'plans', name: 'Membership Plans', icon: CreditCard },
-  { id: 'trainers', name: 'Trainers', icon: UserCog },
-  { id: 'exercises', name: 'Exercises', icon: Dumbbell },
-  { id: 'equipment', name: 'Equipment', icon: Wrench },
-  { id: 'workouts', name: 'Workouts', icon: Activity },
-  { id: 'levels', name: 'Workout Levels', icon: Trophy },
-  { id: 'diet', name: 'Diet Plans', icon: Utensils },
-  { id: 'classes', name: 'Classes', icon: CalendarDays },
-  { id: 'attendance', name: 'Attendance', icon: ClipboardList },
-  { id: 'payments', name: 'Payments', icon: CreditCard },
-  { id: 'users', name: 'Users & Roles', icon: ShieldCheck },
-  { id: 'mobile', name: 'Mobile App', icon: Smartphone },
-  { id: 'reports', name: 'Reports', icon: BarChart3 },
-  { id: 'settings', name: 'Settings', icon: Settings },
-]
+  { id: "dashboard", name: "Dashboard", icon: LayoutDashboard },
+  { id: "members", name: "Members", icon: Users },
+  { id: "plans", name: "Membership Plans", icon: CreditCard },
+  { id: "trainers", name: "Trainers", icon: UserCog },
+  { id: "exercises", name: "Exercises", icon: Dumbbell },
+  { id: "equipment", name: "Equipment", icon: Wrench },
+  { id: "workouts", name: "Workouts", icon: Activity },
+  { id: "levels", name: "Workout Levels", icon: Trophy },
+  { id: "diet", name: "Diet Plans", icon: Utensils },
+  { id: "classes", name: "Classes", icon: CalendarDays },
+  { id: "attendance", name: "Attendance", icon: ClipboardList },
+  { id: "payments", name: "Payments", icon: CreditCard },
+  { id: "users", name: "Users & Roles", icon: ShieldCheck },
+  { id: "mobile", name: "Mobile App", icon: Smartphone },
+  { id: "reports", name: "Reports", icon: BarChart3 },
+  { id: "settings", name: "Settings", icon: Settings },
+];
 
 const periodMap = {
-  Today: 'today',
-  'This Week': 'week',
-  'This Month': 'month',
-}
+  Today: "today",
+  "This Week": "week",
+  "This Month": "month",
+};
 
 export default function Attendance({ onNavigate, onLogout }) {
-  const [attendances, setAttendances] = useState([])
+  const [attendances, setAttendances] = useState([]);
   const [stats, setStats] = useState({
     today_check_ins: 0,
     inside_gym: 0,
-    avg_session: '0m',
+    avg_session: "0m",
     missed_today: 0,
-    peak_hour: { label: 'Not set', count: 0 },
-  })
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState('')
-  const [searchTerm, setSearchTerm] = useState('')
-  const [periodFilter, setPeriodFilter] = useState('Today')
+    peak_hour: { label: "Not set", count: 0 },
+  });
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [periodFilter, setPeriodFilter] = useState("Today");
+  const [lastSyncedAt, setLastSyncedAt] = useState(null);
 
   const loadAttendance = async () => {
-    setIsLoading(true)
-    setError('')
+    setIsLoading(true);
+    setError("");
 
     try {
       const response = await fetch(
         `${apiBaseUrl}/attendance?period=${periodMap[periodFilter]}`,
         {
           headers: {
-            Accept: 'application/json',
-            Authorization: `Bearer ${localStorage.getItem('aurex_admin_token')}`,
+            Accept: "application/json",
+            Authorization: `Bearer ${localStorage.getItem("aurex_admin_token")}`,
           },
         },
-      )
-      const payload = await response.json()
+      );
+      const payload = await response.json();
 
       if (!response.ok) {
         if (response.status === 401) {
-          onLogout()
-          return
+          onLogout();
+          return;
         }
 
-        throw new Error(payload.message || 'Unable to load attendance.')
+        throw new Error(payload.message || "Unable to load attendance.");
       }
 
-      setAttendances(payload.attendances || [])
-      setStats(payload.stats || stats)
+      setAttendances(payload.attendances || []);
+      setStats(payload.stats || stats);
+      setLastSyncedAt(new Date());
     } catch (caughtError) {
-      setError(caughtError.message || 'Unable to load attendance.')
+      setError(caughtError.message || "Unable to load attendance.");
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
 
   useEffect(() => {
-    loadAttendance()
+    loadAttendance();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [periodFilter])
+  }, [periodFilter]);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      loadAttendance();
+    }, 10000);
+
+    return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [periodFilter]);
 
   const filteredAttendances = useMemo(() => {
-    const search = searchTerm.trim().toLowerCase()
+    const search = searchTerm.trim().toLowerCase();
 
-    if (!search) return attendances
+    if (!search) return attendances;
 
     return attendances.filter(
       (row) =>
         row.member_name?.toLowerCase().includes(search) ||
         row.member_phone?.toLowerCase().includes(search) ||
         row.plan_name?.toLowerCase().includes(search),
-    )
-  }, [attendances, searchTerm])
+    );
+  }, [attendances, searchTerm]);
 
   const handleCheckout = async (attendance) => {
     const confirmation = await Swal.fire({
-      title: 'Check out member?',
+      title: "Check out member?",
       text: `${attendance.member_name} will be checked out now.`,
-      icon: 'question',
+      icon: "question",
       showCancelButton: true,
-      confirmButtonText: 'Yes, check out',
-      cancelButtonText: 'Cancel',
-      background: '#101010',
-      color: '#ffffff',
-      confirmButtonColor: '#C8A13A',
-      cancelButtonColor: '#2a2a2a',
-    })
+      confirmButtonText: "Yes, check out",
+      cancelButtonText: "Cancel",
+      background: "#101010",
+      color: "#ffffff",
+      confirmButtonColor: "#C8A13A",
+      cancelButtonColor: "#2a2a2a",
+    });
 
-    if (!confirmation.isConfirmed) return
+    if (!confirmation.isConfirmed) return;
 
     try {
       const response = await fetch(
         `${apiBaseUrl}/attendance/${attendance.id}/checkout`,
         {
-          method: 'POST',
+          method: "POST",
           headers: {
-            Accept: 'application/json',
-            Authorization: `Bearer ${localStorage.getItem('aurex_admin_token')}`,
+            Accept: "application/json",
+            Authorization: `Bearer ${localStorage.getItem("aurex_admin_token")}`,
           },
         },
-      )
-      const payload = await response.json()
+      );
+      const payload = await response.json();
 
       if (!response.ok) {
-        throw new Error(payload.message || 'Unable to check out member.')
+        throw new Error(payload.message || "Unable to check out member.");
       }
 
       await Swal.fire({
-        title: 'Checked out',
-        text: payload.message || 'Member checked out successfully.',
-        icon: 'success',
-        background: '#101010',
-        color: '#ffffff',
-        confirmButtonColor: '#C8A13A',
-      })
+        title: "Checked out",
+        text: payload.message || "Member checked out successfully.",
+        icon: "success",
+        background: "#101010",
+        color: "#ffffff",
+        confirmButtonColor: "#C8A13A",
+      });
 
-      loadAttendance()
+      loadAttendance();
     } catch (caughtError) {
       await Swal.fire({
-        title: 'Check-out failed',
-        text: caughtError.message || 'Unable to check out member.',
-        icon: 'error',
-        background: '#101010',
-        color: '#ffffff',
-        confirmButtonColor: '#C8A13A',
-      })
+        title: "Check-out failed",
+        text: caughtError.message || "Unable to check out member.",
+        icon: "error",
+        background: "#101010",
+        color: "#ffffff",
+        confirmButtonColor: "#C8A13A",
+      });
     }
-  }
+  };
 
   return (
     <div className="min-h-screen bg-[#050505] text-white flex">
@@ -188,8 +199,8 @@ export default function Attendance({ onNavigate, onLogout }) {
 
         <nav className="space-y-1 flex-1 overflow-y-auto pr-1">
           {menuItems.map((item) => {
-            const Icon = item.icon
-            const active = item.id === 'attendance'
+            const Icon = item.icon;
+            const active = item.id === "attendance";
 
             return (
               <button
@@ -198,14 +209,14 @@ export default function Attendance({ onNavigate, onLogout }) {
                 onClick={() => onNavigate(item.id)}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl transition text-sm ${
                   active
-                    ? 'bg-[#C8A13A] text-black font-bold shadow-lg shadow-[#C8A13A]/20'
-                    : 'text-gray-400 hover:bg-white/5 hover:text-white'
+                    ? "bg-[#C8A13A] text-black font-bold shadow-lg shadow-[#C8A13A]/20"
+                    : "text-gray-400 hover:bg-white/5 hover:text-white"
                 }`}
               >
                 <Icon size={19} />
                 <span>{item.name}</span>
               </button>
-            )
+            );
           })}
         </nav>
 
@@ -231,8 +242,8 @@ export default function Attendance({ onNavigate, onLogout }) {
         <div className="lg:hidden bg-[#090909] border border-white/10 rounded-3xl p-3 mb-6 overflow-x-auto">
           <div className="flex gap-2 min-w-max">
             {menuItems.map((item) => {
-              const Icon = item.icon
-              const active = item.id === 'attendance'
+              const Icon = item.icon;
+              const active = item.id === "attendance";
 
               return (
                 <button
@@ -241,14 +252,14 @@ export default function Attendance({ onNavigate, onLogout }) {
                   onClick={() => onNavigate(item.id)}
                   className={`flex items-center gap-2 px-4 py-3 rounded-2xl text-sm ${
                     active
-                      ? 'bg-[#C8A13A] text-black font-bold'
-                      : 'text-gray-400 bg-white/5'
+                      ? "bg-[#C8A13A] text-black font-bold"
+                      : "text-gray-400 bg-white/5"
                   }`}
                 >
                   <Icon size={17} />
                   {item.name}
                 </button>
-              )
+              );
             })}
           </div>
         </div>
@@ -263,7 +274,7 @@ export default function Attendance({ onNavigate, onLogout }) {
 
           <button
             type="button"
-            onClick={() => onNavigate('manual-check-in')}
+            onClick={() => onNavigate("manual-check-in")}
             className="bg-[#C8A13A] text-black font-bold px-5 py-3 rounded-2xl flex items-center justify-center gap-2"
           >
             <UserCheck size={18} />
@@ -272,10 +283,22 @@ export default function Attendance({ onNavigate, onLogout }) {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5 mb-8">
-          <StatCard icon={ClipboardList} title="Today Check-ins" value={stats.today_check_ins} />
+          <StatCard
+            icon={ClipboardList}
+            title="Today Check-ins"
+            value={stats.today_check_ins}
+          />
           <StatCard icon={Users} title="Inside Gym" value={stats.inside_gym} />
-          <StatCard icon={Clock} title="Avg Session" value={stats.avg_session} />
-          <StatCard icon={UserX} title="Missed Today" value={stats.missed_today} />
+          <StatCard
+            icon={Clock}
+            title="Avg Session"
+            value={stats.avg_session}
+          />
+          <StatCard
+            icon={UserX}
+            title="Missed Today"
+            value={stats.missed_today}
+          />
         </div>
 
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 mb-6">
@@ -296,7 +319,7 @@ export default function Attendance({ onNavigate, onLogout }) {
                 onChange={(event) => setPeriodFilter(event.target.value)}
                 className="appearance-none bg-[#050505] border border-white/10 rounded-2xl px-4 py-3 text-gray-300 outline-none [color-scheme:dark]"
               >
-                {['Today', 'This Week', 'This Month'].map((item) => (
+                {["Today", "This Week", "This Month"].map((item) => (
                   <option key={item} className="bg-[#050505] text-white">
                     {item}
                   </option>
@@ -317,7 +340,9 @@ export default function Attendance({ onNavigate, onLogout }) {
             <p className="text-gray-400 text-sm">Peak Hour</p>
             <div className="flex items-end justify-between gap-4 mt-3">
               <div>
-                <h3 className="text-3xl font-black">{stats.peak_hour?.label || 'Not set'}</h3>
+                <h3 className="text-3xl font-black">
+                  {stats.peak_hour?.label || "Not set"}
+                </h3>
                 <p className="text-[#C8A13A] text-sm mt-1">
                   {stats.peak_hour?.count || 0} check-ins
                 </p>
@@ -347,6 +372,14 @@ export default function Attendance({ onNavigate, onLogout }) {
               {filteredAttendances.length} records
             </span>
           </div>
+          <div className="px-5 pb-4 -mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-500">
+            <span>
+              Last synced{" "}
+              {lastSyncedAt ? formatRelativeTime(lastSyncedAt) : "never"}
+            </span>
+            {lastSyncedAt && <span className="text-gray-700">•</span>}
+            <span>Auto-refreshes every 10 seconds.</span>
+          </div>
 
           <div className="overflow-x-auto">
             <table className="w-full min-w-[940px]">
@@ -354,6 +387,7 @@ export default function Attendance({ onNavigate, onLogout }) {
                 <tr>
                   <th className="px-5 py-4">Member</th>
                   <th className="px-5 py-4">Plan</th>
+                  <th className="px-5 py-4">Source</th>
                   <th className="px-5 py-4">Check In</th>
                   <th className="px-5 py-4">Check Out</th>
                   <th className="px-5 py-4">Duration</th>
@@ -364,57 +398,102 @@ export default function Attendance({ onNavigate, onLogout }) {
               <tbody className="divide-y divide-white/10">
                 {isLoading && (
                   <tr>
-                    <td className="px-5 py-8 text-center text-gray-400" colSpan="7">
+                    <td
+                      className="px-5 py-8 text-center text-gray-400"
+                      colSpan="8"
+                    >
                       Loading attendance...
                     </td>
                   </tr>
                 )}
                 {!isLoading && error && (
                   <tr>
-                    <td className="px-5 py-8 text-center text-red-300" colSpan="7">
+                    <td
+                      className="px-5 py-8 text-center text-red-300"
+                      colSpan="8"
+                    >
                       {error}
                     </td>
                   </tr>
                 )}
-                {!isLoading && !error && filteredAttendances.map((row) => (
-                  <tr key={row.id} className="hover:bg-white/[0.03]">
-                    <td className="px-5 py-5">
-                      <div className="flex items-center gap-3">
-                        <div className="w-11 h-11 rounded-2xl bg-[#C8A13A]/15 text-[#C8A13A] flex items-center justify-center font-black">
-                          {row.member_name?.charAt(0) || 'M'}
+                {!isLoading &&
+                  !error &&
+                  filteredAttendances.map((row) => (
+                    <tr key={row.id} className="hover:bg-white/[0.03]">
+                      <td className="px-5 py-5">
+                        <div className="flex items-center gap-3">
+                          <div className="w-11 h-11 rounded-2xl bg-[#C8A13A]/15 text-[#C8A13A] flex items-center justify-center font-black">
+                            {row.member_name?.charAt(0) || "M"}
+                          </div>
+                          <div>
+                            <p className="font-bold">{row.member_name}</p>
+                            <p className="text-gray-500 text-sm">
+                              {row.member_phone || "Member"}
+                            </p>
+                          </div>
                         </div>
-                        <div>
-                          <p className="font-bold">{row.member_name}</p>
-                          <p className="text-gray-500 text-sm">{row.member_phone || 'Member'}</p>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-5 py-5 text-gray-300">{row.plan_name || 'Not set'}</td>
-                    <td className="px-5 py-5 text-gray-300">{formatDateTime(row.check_in_at)}</td>
-                    <td className="px-5 py-5 text-gray-300">{formatDateTime(row.check_out_at)}</td>
-                    <td className="px-5 py-5 text-gray-300">{durationText(row)}</td>
-                    <td className="px-5 py-5">
-                      <StatusBadge status={row.status} />
-                    </td>
-                    <td className="px-5 py-5 text-right">
-                      {row.status === 'Inside Gym' ? (
-                        <button
-                          type="button"
-                          onClick={() => handleCheckout(row)}
-                          className="px-4 py-2 rounded-xl bg-[#C8A13A] text-black text-sm font-bold"
-                        >
-                          Check out
-                        </button>
-                      ) : (
-                        <span className="text-gray-500 text-sm">Done</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                      <td className="px-5 py-5 text-gray-300">
+                        {row.plan_name || "Not set"}
+                      </td>
+                      <td className="px-5 py-5">
+                        <SourceBadge
+                          entryMethod={row.entry_method}
+                          agentId={row.agent_id}
+                        />
+                      </td>
+                      <td className="px-5 py-5 text-gray-300">
+                        {formatDateTime(row.check_in_at)}
+                      </td>
+                      <td className="px-5 py-5 text-gray-300">
+                        {formatDateTime(row.check_out_at)}
+                      </td>
+                      <td className="px-5 py-5 text-gray-300">
+                        {durationText(row)}
+                      </td>
+                      <td className="px-5 py-5">
+                        <StatusBadge status={row.status} />
+                      </td>
+                      <td className="px-5 py-5 text-right">
+                        {row.status === "Inside Gym" ? (
+                          <button
+                            type="button"
+                            onClick={() => handleCheckout(row)}
+                            className="px-4 py-2 rounded-xl bg-[#C8A13A] text-black text-sm font-bold"
+                          >
+                            Check out
+                          </button>
+                        ) : (
+                          <span className="text-gray-500 text-sm">Done</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
                 {!isLoading && !error && filteredAttendances.length === 0 && (
                   <tr>
-                    <td className="px-5 py-8 text-center text-gray-400" colSpan="7">
-                      No attendance records found.
+                    <td
+                      className="px-5 py-10 text-center text-gray-400"
+                      colSpan="8"
+                    >
+                      <div className="max-w-xl mx-auto space-y-2">
+                        <p className="text-white font-bold text-lg">
+                          No attendance records synced yet.
+                        </p>
+                        <p className="text-sm leading-6">
+                          If you just used the card on the controller, make sure
+                          the device is posting{" "}
+                          <span className="text-[#C8A13A]">CardEvent</span>{" "}
+                          callbacks to the sync agent at{" "}
+                          <span className="text-[#C8A13A]">
+                            /api/controller/callback
+                          </span>
+                          .
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          Once the controller sends the scan, it will appear
+                          here as a turnstile attendance record.
+                        </p>
+                      </div>
                     </td>
                   </tr>
                 )}
@@ -424,7 +503,23 @@ export default function Attendance({ onNavigate, onLogout }) {
         </div>
       </main>
     </div>
-  )
+  );
+}
+
+function formatRelativeTime(date) {
+  const diffMs = Date.now() - date.getTime();
+  const diffSeconds = Math.max(0, Math.round(diffMs / 1000));
+
+  if (diffSeconds < 5) return "just now";
+  if (diffSeconds < 60) return `${diffSeconds}s ago`;
+
+  const diffMinutes = Math.round(diffSeconds / 60);
+  if (diffMinutes < 60) return `${diffMinutes}m ago`;
+
+  const diffHours = Math.round(diffMinutes / 60);
+  if (diffHours < 24) return `${diffHours}h ago`;
+
+  return date.toLocaleString();
 }
 
 function StatCard({ icon: Icon, title, value }) {
@@ -436,43 +531,64 @@ function StatCard({ icon: Icon, title, value }) {
       <p className="text-gray-400 text-sm">{title}</p>
       <h3 className="text-2xl font-black mt-1">{value}</h3>
     </div>
-  )
+  );
 }
 
 function StatusBadge({ status }) {
-  const active = status === 'Inside Gym'
+  const active = status === "Inside Gym";
 
   return (
     <span
       className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold ${
-        active ? 'bg-green-500/15 text-green-400' : 'bg-[#C8A13A]/15 text-[#C8A13A]'
+        active
+          ? "bg-green-500/15 text-green-400"
+          : "bg-[#C8A13A]/15 text-[#C8A13A]"
       }`}
     >
       <CheckCircle size={14} />
       {status}
     </span>
-  )
+  );
+}
+
+function SourceBadge({ entryMethod, agentId }) {
+  const isTurnstile = entryMethod === "Turnstile" || Boolean(agentId);
+
+  return (
+    <span
+      className={`px-3 py-1 rounded-full text-xs font-bold ${
+        isTurnstile
+          ? "bg-blue-500/15 text-blue-300"
+          : "bg-white/10 text-gray-300"
+      }`}
+    >
+      {isTurnstile ? "Turnstile" : entryMethod || "Manual"}
+    </span>
+  );
 }
 
 function formatDateTime(value) {
-  if (!value) return '-'
+  if (!value) return "-";
 
-  return new Intl.DateTimeFormat('en', {
-    hour: '2-digit',
-    minute: '2-digit',
-    day: '2-digit',
-    month: 'short',
-  }).format(new Date(value))
+  return new Intl.DateTimeFormat("en", {
+    hour: "2-digit",
+    minute: "2-digit",
+    day: "2-digit",
+    month: "short",
+  }).format(new Date(value));
 }
 
 function durationText(row) {
-  if (!row.check_in_at) return '-'
+  if (!row.check_in_at) return "-";
 
-  const start = new Date(row.check_in_at)
-  const end = row.check_out_at ? new Date(row.check_out_at) : new Date()
-  const minutes = Math.max(Math.round((end.getTime() - start.getTime()) / 60000), 0)
+  const start = new Date(row.check_in_at);
+  const end = row.check_out_at ? new Date(row.check_out_at) : new Date();
+  const minutes = Math.max(
+    Math.round((end.getTime() - start.getTime()) / 60000),
+    0,
+  );
 
-  if (minutes < 60) return `${minutes}m`
+  if (minutes < 60) return `${minutes}m`;
 
-  return `${Math.floor(minutes / 60)}h ${minutes % 60}m`
+  return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
 }

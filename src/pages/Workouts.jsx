@@ -143,7 +143,8 @@ export default function Workouts({ onNavigate, onLogout }) {
   }, [workouts])
 
   const handleViewWorkout = (workout) => {
-    const exercises = Array.isArray(workout.exercises) ? workout.exercises : []
+    const workoutDays = normalizeWorkoutDays(workout)
+    const exercisesCount = workoutExerciseCount(workout)
 
     Swal.fire({
       title: '',
@@ -170,8 +171,8 @@ export default function Workouts({ onNavigate, onLogout }) {
           <div class="workout-modal-grid" style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:18px">
             ${metricCard('Duration', workout.duration || 'Not set')}
             ${metricCard('Calories', workout.calories_burn || 'Not set')}
-            ${metricCard('Exercises', exercises.length)}
-            ${metricCard('Access', workout.access_type || 'Not set')}
+            ${metricCard('Days', workoutDays.length || 1)}
+            ${metricCard('Exercises', exercisesCount)}
           </div>
 
           ${
@@ -181,17 +182,33 @@ export default function Workouts({ onNavigate, onLogout }) {
           }
 
           ${
-            exercises.length
+            workoutDays.length
               ? `<div style="margin-top:18px;background:#080808;border:1px solid rgba(255,255,255,0.1);border-radius:18px;padding:16px">
-                  <div style="color:#C8A13A;font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:1px;margin-bottom:12px">Exercises</div>
+                  <div style="color:#C8A13A;font-size:12px;font-weight:900;text-transform:uppercase;letter-spacing:1px;margin-bottom:12px">Workout Days</div>
                   <div style="display:grid;gap:10px">
-                    ${exercises
+                    ${workoutDays
                       .map(
-                        (exercise, index) => `
-                          <div style="display:grid;grid-template-columns:34px 1fr auto;gap:10px;align-items:center;color:#d1d5db;font-size:14px">
-                            <span style="width:26px;height:26px;border-radius:999px;background:rgba(200,161,58,0.16);color:#C8A13A;display:inline-flex;align-items:center;justify-content:center;font-weight:900">${index + 1}</span>
-                            <span>${escapeHtml(exercise.name)} <span style="color:#6b7280">(${escapeHtml(exercise.body_part || 'Body part not set')})</span></span>
-                            <span style="color:#9ca3af">${escapeHtml(exercise.sets || '-')} sets | ${escapeHtml(exercise.reps || '-')} reps | ${escapeHtml(exercise.rest || '-')}</span>
+                        (day) => `
+                          <div style="border:1px solid rgba(255,255,255,0.08);border-radius:14px;padding:12px">
+                            <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+                              <span style="width:28px;height:28px;border-radius:999px;background:rgba(200,161,58,0.16);color:#C8A13A;display:inline-flex;align-items:center;justify-content:center;font-weight:900">${day.day_number}</span>
+                              <span style="color:white;font-weight:900">${escapeHtml(day.title)}</span>
+                              <span style="color:#6b7280;font-size:12px">${day.exercises.length} exercises</span>
+                            </div>
+                            ${day.notes ? `<div style="color:#9ca3af;font-size:13px;margin-bottom:10px">${escapeHtml(day.notes)}</div>` : ''}
+                            <div style="display:grid;gap:8px">
+                              ${day.exercises
+                                .map(
+                                  (exercise, index) => `
+                                    <div style="display:grid;grid-template-columns:34px 1fr auto;gap:10px;align-items:center;color:#d1d5db;font-size:14px">
+                                      <span style="color:#C8A13A;font-weight:900">${index + 1}.</span>
+                                      <span>${escapeHtml(exercise.name)} <span style="color:#6b7280">(${escapeHtml(exercise.body_part || 'Body part not set')})</span></span>
+                                      <span style="color:#9ca3af">${escapeHtml(exercise.sets || '-')} sets | ${escapeHtml(exercise.reps || '-')} reps | ${escapeHtml(exercise.rest || '-')}</span>
+                                    </div>
+                                  `,
+                                )
+                                .join('') || '<div style="color:#6b7280;font-size:13px">No exercises added.</div>'}
+                            </div>
                           </div>
                         `,
                       )
@@ -432,7 +449,7 @@ export default function Workouts({ onNavigate, onLogout }) {
                     <th className="p-5">Goal</th>
                     <th className="p-5">Level</th>
                     <th className="p-5">Duration</th>
-                    <th className="p-5">Exercises</th>
+                    <th className="p-5">Days / Exercises</th>
                     <th className="p-5">Calories</th>
                     <th className="p-5">Status</th>
                     <th className="p-5 text-right">Actions</th>
@@ -479,7 +496,8 @@ export default function Workouts({ onNavigate, onLogout }) {
                         {item.duration || 'Not set'}
                       </td>
                       <td className="p-5 text-gray-300">
-                        {Array.isArray(item.exercises) ? item.exercises.length : 0}
+                        {normalizeWorkoutDays(item).length || 1} days /{' '}
+                        {workoutExerciseCount(item)} exercises
                       </td>
                       <td className="p-5 text-gray-300">
                         {item.calories_burn || 'Not set'}
@@ -565,6 +583,35 @@ function statusTone(status) {
   if (status === 'Published') return '#4ade80'
   if (status === 'Draft') return '#93c5fd'
   return '#fdba74'
+}
+
+function normalizeWorkoutDays(workout) {
+  if (Array.isArray(workout.workout_days) && workout.workout_days.length > 0) {
+    return workout.workout_days.map((day, index) => ({
+      day_number: Number(day.day_number) || index + 1,
+      title: day.title || `Day ${index + 1}`,
+      notes: day.notes || '',
+      exercises: Array.isArray(day.exercises) ? day.exercises : [],
+    }))
+  }
+
+  const legacyExercises = Array.isArray(workout.exercises) ? workout.exercises : []
+
+  return [
+    {
+      day_number: 1,
+      title: 'Day 1',
+      notes: '',
+      exercises: legacyExercises,
+    },
+  ]
+}
+
+function workoutExerciseCount(workout) {
+  return normalizeWorkoutDays(workout).reduce(
+    (total, day) => total + day.exercises.length,
+    0,
+  )
 }
 
 function metricCard(label, value) {

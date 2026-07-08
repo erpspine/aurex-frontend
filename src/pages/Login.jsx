@@ -6,7 +6,9 @@ import { Dumbbell, Eye, Lock, Mail } from 'lucide-react'
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? '/api'
 
 export default function Login({ onLogin }) {
-  const [email, setEmail] = useState('')
+  const [email, setEmail] = useState(
+    import.meta.env.DEV ? 'admin@aurex.local' : '',
+  )
   const [password, setPassword] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -24,14 +26,32 @@ export default function Login({ onLogin }) {
         body: JSON.stringify({ email, password }),
       })
 
-      const payload = await response.json()
+      const responseText = await response.text()
+      let payload = {}
+
+      if (responseText.trim()) {
+        try {
+          payload = JSON.parse(responseText)
+        } catch {
+          throw new Error(
+            'The local API returned an invalid response. Confirm Laravel is running on port 8000.',
+          )
+        }
+      }
 
       if (!response.ok) {
         const validationMessage = payload.errors
           ? Object.values(payload.errors).flat().join(' ')
           : payload.message
 
-        throw new Error(validationMessage || 'Unable to login.')
+        throw new Error(
+          validationMessage ||
+            'Unable to reach the local API. Start Aurex using run-local.bat.',
+        )
+      }
+
+      if (!payload.token) {
+        throw new Error('The local API returned an incomplete login response.')
       }
 
       onLogin(payload)
@@ -159,6 +179,16 @@ export default function Login({ onLogin }) {
           <p className="text-center text-gray-500 text-sm mt-10">
             Secure admin access only
           </p>
+          {import.meta.env.DEV && (
+            <div className="mt-5 rounded-2xl border border-[#C8A13A]/30 bg-[#C8A13A]/10 p-4 text-sm text-gray-300">
+              <div className="font-bold text-[#C8A13A]">Local development</div>
+              <div className="mt-2">Email: admin@aurex.local</div>
+              <div>Password: AurexLocal2026!</div>
+              <div className="mt-2 text-xs text-gray-500">
+                This account exists only in the local database.
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
