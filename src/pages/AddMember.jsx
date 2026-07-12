@@ -48,6 +48,7 @@ export default function AddMember({ onBack, memberId = null }) {
   const [syncCardOnSave, setSyncCardOnSave] = useState(true);
   const [formData, setFormData] = useState({ ...emptyMember });
   const [expiryManuallyEdited, setExpiryManuallyEdited] = useState(Boolean(memberId));
+  const [amountManuallyEdited, setAmountManuallyEdited] = useState(Boolean(memberId));
 
   const selectedPlan = plans.find((plan) => plan.id === formData.membership_plan_id);
 
@@ -181,6 +182,22 @@ export default function AddMember({ onBack, memberId = null }) {
     expiryManuallyEdited,
   ]);
 
+  useEffect(() => {
+    if (!selectedPlan || amountManuallyEdited) {
+      return;
+    }
+
+    const planPrice = String(selectedPlan.price_amount ?? "");
+    if (planPrice === formData.amount_paid) {
+      return;
+    }
+
+    setFormData((current) => ({
+      ...current,
+      amount_paid: planPrice,
+    }));
+  }, [selectedPlan, formData.amount_paid, amountManuallyEdited]);
+
   const updateField = (field, value) => {
     setFormData((current) => ({
       ...current,
@@ -193,11 +210,13 @@ export default function AddMember({ onBack, memberId = null }) {
     const startDate = formData.start_date || todayInputValue();
 
     setExpiryManuallyEdited(false);
+    setAmountManuallyEdited(false);
     setFormData((current) => ({
       ...current,
       membership_plan_id: value,
       start_date: startDate,
       expiry_date: plan ? calculateExpiryDate(startDate, plan) : current.expiry_date,
+      amount_paid: plan ? String(plan.price_amount ?? "") : current.amount_paid,
     }));
   };
 
@@ -217,6 +236,11 @@ export default function AddMember({ onBack, memberId = null }) {
   const handleExpiryDateChange = (value) => {
     setExpiryManuallyEdited(true);
     updateField("expiry_date", value);
+  };
+
+  const handleAmountPaidChange = (value) => {
+    setAmountManuallyEdited(true);
+    updateField("amount_paid", value);
   };
 
   const authHeaders = () => ({
@@ -654,11 +678,12 @@ export default function AddMember({ onBack, memberId = null }) {
                         {selectedPlan.name}
                       </span>{" "}
                       uses a {planCycleLabel(selectedPlan)} cycle. Expiry is
-                      calculated from the start date, but you can still edit it
-                      manually.
+                      calculated from the start date and amount is pulled from
+                      the plan price ({formatCurrency(selectedPlan.price_amount)}
+                      ), but you can still edit both manually.
                     </>
                   ) : (
-                    "Select a membership plan to auto-calculate the expiry date."
+                    "Select a membership plan to auto-calculate expiry date and amount paid."
                   )}
                 </div>
                 <Input
@@ -667,9 +692,7 @@ export default function AddMember({ onBack, memberId = null }) {
                   placeholder="100000"
                   type="number"
                   value={formData.amount_paid}
-                  onChange={(event) =>
-                    updateField("amount_paid", event.target.value)
-                  }
+                  onChange={(event) => handleAmountPaidChange(event.target.value)}
                 />
                 <Select
                   label="Payment Method"
@@ -849,6 +872,10 @@ function planCycleLabel(plan) {
   }
 
   return `${cycle} (${days} day${days === 1 ? "" : "s"})`;
+}
+
+function formatCurrency(value) {
+  return `TZS ${Number(value || 0).toLocaleString()}`;
 }
 
 function parseDateInput(value) {
