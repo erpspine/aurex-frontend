@@ -44,9 +44,8 @@ export default function AddMember({ onBack, memberId = null }) {
   const [plans, setPlans] = useState([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoading, setIsLoading] = useState(Boolean(memberId));
-  const [isFetchingCard, setIsFetchingCard] = useState(false);
   const [isPushingCard, setIsPushingCard] = useState(false);
-  const [pushCardNow, setPushCardNow] = useState(false);
+  const [syncCardOnSave, setSyncCardOnSave] = useState(true);
   const [formData, setFormData] = useState({ ...emptyMember });
   const [expiryManuallyEdited, setExpiryManuallyEdited] = useState(Boolean(memberId));
 
@@ -225,57 +224,19 @@ export default function AddMember({ onBack, memberId = null }) {
     Authorization: `Bearer ${localStorage.getItem("aurex_admin_token")}`,
   });
 
-  const fetchCardFromTurnstile = async () => {
-    setIsFetchingCard(true);
-
-    try {
-      const response = await fetch(`${apiBaseUrl}/turnstile/latest-card`, {
-        headers: authHeaders(),
-      });
-      const payload = await response.json();
-
-      if (!response.ok) {
-        throw new Error(payload.message || "Unable to fetch latest card.");
-      }
-
-      if (!payload.card_number) {
-        throw new Error("No turnstile card scan found yet.");
-      }
-
-      updateField("access_code", String(payload.card_number));
-
-      await Swal.fire({
-        title: "Card captured",
-        text: `Card ${payload.card_number} loaded from turnstile events.`,
-        icon: "success",
-        background: "#101010",
-        color: "#ffffff",
-        confirmButtonColor: "#C8A13A",
-      });
-    } catch (caughtError) {
-      await Swal.fire({
-        title: "Fetch failed",
-        text: caughtError.message || "Unable to read card from turnstile.",
-        icon: "error",
-        background: "#101010",
-        color: "#ffffff",
-        confirmButtonColor: "#C8A13A",
-      });
-    } finally {
-      setIsFetchingCard(false);
-    }
-  };
-
   const pushCardToTurnstile = async ({
     cardNumber,
     memberName,
     expiryDate,
+    trackLoading = true,
   }) => {
     if (!cardNumber) {
       throw new Error("Turnstile Card Number is required before pushing.");
     }
 
-    setIsPushingCard(true);
+    if (trackLoading) {
+      setIsPushingCard(true);
+    }
 
     try {
       const response = await fetch(`${apiBaseUrl}/turnstile/cards/push`, {
@@ -305,8 +266,57 @@ export default function AddMember({ onBack, memberId = null }) {
 
       return payload.message || "Card push command queued.";
     } finally {
-      setIsPushingCard(false);
+      if (trackLoading) {
+        setIsPushingCard(false);
+      }
     }
+  };
+
+  const syncCardInBackground = ({ cardNumber, memberName, expiryDate }) => {
+    void pushCardToTurnstile({
+      cardNumber,
+      memberName,
+      expiryDate,
+      trackLoading: false,
+    }).catch(async (caughtError) => {
+      const message =
+        caughtError.message ||
+        "Member was saved, but card sync to turnstile failed.";
+
+      if (
+        message.includes("Unable to determine target turnstile agent")
+      ) {
+        setSyncCardOnSave(false);
+
+        await Swal.fire({
+          toast: true,
+          position: "top-end",
+          title: "Card sync skipped",
+          text: "Set TURNSTILE_AGENT_ID on backend or VITE_TURNSTILE_AGENT_ID on frontend, then enable background sync again.",
+          icon: "info",
+          timer: 5500,
+          timerProgressBar: true,
+          showConfirmButton: false,
+          background: "#101010",
+          color: "#ffffff",
+        });
+
+        return;
+      }
+
+      await Swal.fire({
+        toast: true,
+        position: "top-end",
+        title: "Background sync failed",
+        text: message,
+        icon: "warning",
+        timer: 5000,
+        timerProgressBar: true,
+        showConfirmButton: false,
+        background: "#101010",
+        color: "#ffffff",
+      });
+    });
   };
 
   const handlePushCardOnly = async () => {
@@ -417,10 +427,11 @@ export default function AddMember({ onBack, memberId = null }) {
         throw new Error(validationMessage || "Unable to save member.");
       }
 
-      let pushMessage = "";
+      const shouldSyncCardInBackground =
+        syncCardOnSave && Boolean(formData.access_code.trim());
 
-      if (pushCardNow && formData.access_code.trim()) {
-        pushMessage = await pushCardToTurnstile({
+      if (shouldSyncCardInBackground) {
+        syncCardInBackground({
           cardNumber: formData.access_code.trim(),
           memberName: payload.member?.full_name || formData.full_name.trim(),
           expiryDate: formData.expiry_date,
@@ -432,7 +443,9 @@ export default function AddMember({ onBack, memberId = null }) {
         text: [
           payload.message ||
             `Member ${memberId ? "updated" : "created"} successfully.`,
-          pushMessage,
+          shouldSyncCardInBackground
+            ? "Card synchronization is running in the background."
+            : "",
         ]
           .filter(Boolean)
           .join(" "),
@@ -592,33 +605,31 @@ export default function AddMember({ onBack, memberId = null }) {
                 <div className="md:col-span-2 flex flex-wrap gap-3 items-center">
                   <button
                     type="button"
-                    onClick={fetchCardFromTurnstile}
-                    disabled={isFetchingCard || isSubmitting || isLoading}
-                    className="px-4 py-2 rounded-xl border border-[#C8A13A]/60 text-[#C8A13A] hover:bg-[#C8A13A]/10 disabled:opacity-50"
-                  >
-                    {isFetchingCard
-                      ? "Reading from turnstile..."
-                      : "Read Card From Turnstile"}
-                  </button>
-                  <button
-                    type="button"
                     onClick={handlePushCardOnly}
                     disabled={isPushingCard || isSubmitting || isLoading}
                     className="px-4 py-2 rounded-xl border border-white/20 text-white hover:border-[#C8A13A]/60 hover:text-[#C8A13A] disabled:opacity-50"
                   >
                     {isPushingCard
-                      ? "Queueing push..."
-                      : "Push Entered Card To Turnstile"}
+                      ? "Queueing sync..."
+                      : "Queue Card Sync Now"}
                   </button>
                   <label className="flex items-center gap-2 text-sm text-gray-300">
                     <input
                       type="checkbox"
-                      checked={pushCardNow}
-                      onChange={(event) => setPushCardNow(event.target.checked)}
+                      checked={syncCardOnSave}
+                      onChange={(event) =>
+                        setSyncCardOnSave(event.target.checked)
+                      }
                       className="accent-[#C8A13A]"
                     />
-                    Auto-push card when saving this member
+                    Sync card in background when saving this member
                   </label>
+                  <p className="w-full text-xs text-gray-500">
+                    Live card reading from turnstile is unavailable in cloud mode.
+                    Enter the card number manually and the system will synchronize it in the background.
+                    If sync is skipped, configure TURNSTILE_AGENT_ID (backend) or
+                    VITE_TURNSTILE_AGENT_ID (frontend).
+                  </p>
                 </div>
                 <Input
                   icon={Calendar}
