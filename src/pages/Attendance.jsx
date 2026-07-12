@@ -519,7 +519,13 @@ function formatRelativeTime(date) {
   const diffHours = Math.round(diffMinutes / 60);
   if (diffHours < 24) return `${diffHours}h ago`;
 
-  return date.toLocaleString();
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
 }
 
 function StatCard({ icon: Icon, title, value }) {
@@ -570,11 +576,12 @@ function SourceBadge({ entryMethod, agentId }) {
 function formatDateTime(value) {
   if (!value) return "-";
 
-  return new Intl.DateTimeFormat("en", {
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
-    day: "2-digit",
-    month: "short",
   }).format(new Date(value));
 }
 
