@@ -319,8 +319,8 @@ export default function AddPlan({ onBack, planId = null }) {
               />
               <Input
                 icon={CalendarDays}
-                label="Duration"
-                placeholder="30"
+                label="Billing Length"
+                placeholder="1"
                 type="number"
                 value={formData.duration_days}
                 onChange={(event) =>
@@ -333,7 +333,15 @@ export default function AddPlan({ onBack, planId = null }) {
                 onChange={(event) =>
                   updateField('billing_cycle', event.target.value)
                 }
-                options={['Monthly', 'Weekly', 'Daily', 'Yearly', 'One Time']}
+                options={[
+                  'Monthly',
+                  'Quarterly',
+                  'Half Year',
+                  'Weekly',
+                  'Daily',
+                  'Yearly',
+                  'One Time',
+                ]}
               />
               <Input
                 icon={Users}
@@ -453,7 +461,7 @@ export default function AddPlan({ onBack, planId = null }) {
                 {formData.name || 'Gold Monthly'}
               </h3>
               <p className="text-gray-500 text-sm mt-1">
-                {formData.duration_days || '30'} Days
+                {formatBillingLength(formData.duration_days, formData.billing_cycle)}
               </p>
               <h2 className="text-3xl font-black text-[#C8A13A] mt-5">
                 TZS {Number(formData.price_amount || 0).toLocaleString()}
@@ -482,8 +490,8 @@ export default function AddPlan({ onBack, planId = null }) {
             />
             <SummaryItem
               icon={CalendarDays}
-              label="Duration"
-              value={`${formData.duration_days || 0} Days`}
+              label="Billing Length"
+              value={formatBillingLength(formData.duration_days, formData.billing_cycle)}
             />
           </Section>
 
@@ -525,6 +533,27 @@ export default function AddPlan({ onBack, planId = null }) {
       )}
     </form>
   )
+}
+
+function formatBillingLength(value, cycle) {
+  const amount = Number(value || 0)
+  const safeCycle = cycle || 'Daily'
+
+  if (!amount) return `0 ${safeCycle}`
+
+  if (safeCycle === 'One Time') {
+    return `${amount} ${amount === 1 ? 'Day' : 'Days'}`
+  }
+
+  if (safeCycle === 'Quarterly') {
+    return `${amount} ${amount === 1 ? 'Quarter' : 'Quarters'} (${amount * 3} months)`
+  }
+
+  if (safeCycle === 'Half Year') {
+    return `${amount} ${amount === 1 ? 'Half Year' : 'Half Years'} (${amount * 6} months)`
+  }
+
+  return `${amount} ${safeCycle}${amount === 1 ? '' : ' cycles'}`
 }
 
 function Section({ title, children }) {
