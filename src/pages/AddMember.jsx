@@ -26,7 +26,7 @@ const emptyMember = {
   address: "",
   membership_plan_id: "",
   membership_status: "Active",
-  start_date: "",
+  start_date: todayInputValue(),
   expiry_date: "",
   amount_paid: "",
   payment_method: "Cash",
@@ -48,6 +48,9 @@ export default function AddMember({ onBack, memberId = null }) {
   const [isPushingCard, setIsPushingCard] = useState(false);
   const [pushCardNow, setPushCardNow] = useState(false);
   const [formData, setFormData] = useState({ ...emptyMember });
+  const [expiryManuallyEdited, setExpiryManuallyEdited] = useState(Boolean(memberId));
+
+  const selectedPlan = plans.find((plan) => plan.id === formData.membership_plan_id);
 
   useEffect(() => {
     const loadPlans = async () => {
@@ -146,11 +149,75 @@ export default function AddMember({ onBack, memberId = null }) {
     };
   }, [memberId, onBack]);
 
+  useEffect(() => {
+    if (memberId || formData.start_date) {
+      return;
+    }
+
+    setFormData((current) => ({
+      ...current,
+      start_date: todayInputValue(),
+    }));
+  }, [formData.start_date, memberId]);
+
+  useEffect(() => {
+    if (!selectedPlan || !formData.start_date || expiryManuallyEdited) {
+      return;
+    }
+
+    const expiryDate = calculateExpiryDate(formData.start_date, selectedPlan);
+    if (!expiryDate || expiryDate === formData.expiry_date) {
+      return;
+    }
+
+    setFormData((current) => ({
+      ...current,
+      expiry_date: expiryDate,
+    }));
+  }, [
+    selectedPlan,
+    formData.membership_plan_id,
+    formData.start_date,
+    formData.expiry_date,
+    expiryManuallyEdited,
+  ]);
+
   const updateField = (field, value) => {
     setFormData((current) => ({
       ...current,
       [field]: value,
     }));
+  };
+
+  const handlePlanChange = (value) => {
+    const plan = plans.find((item) => item.id === value);
+    const startDate = formData.start_date || todayInputValue();
+
+    setExpiryManuallyEdited(false);
+    setFormData((current) => ({
+      ...current,
+      membership_plan_id: value,
+      start_date: startDate,
+      expiry_date: plan ? calculateExpiryDate(startDate, plan) : current.expiry_date,
+    }));
+  };
+
+  const handleStartDateChange = (value) => {
+    const nextStartDate = value || todayInputValue();
+
+    setExpiryManuallyEdited(false);
+    setFormData((current) => ({
+      ...current,
+      start_date: nextStartDate,
+      expiry_date: selectedPlan
+        ? calculateExpiryDate(nextStartDate, selectedPlan)
+        : current.expiry_date,
+    }));
+  };
+
+  const handleExpiryDateChange = (value) => {
+    setExpiryManuallyEdited(true);
+    updateField("expiry_date", value);
   };
 
   const authHeaders = () => ({
@@ -272,6 +339,22 @@ export default function AddMember({ onBack, memberId = null }) {
 
   const handleSubmit = async (event) => {
     event.preventDefault();
+
+    if (
+      formData.start_date &&
+      formData.expiry_date &&
+      formData.start_date > formData.expiry_date
+    ) {
+      await Swal.fire({
+        title: "Invalid membership dates",
+        text: "Start date should not be greater than expiry date.",
+        icon: "error",
+        background: "#101010",
+        color: "#ffffff",
+        confirmButtonColor: "#C8A13A",
+      });
+      return;
+    }
 
     const confirmation = await Swal.fire({
       title: memberId ? "Update member?" : "Save member?",
@@ -480,9 +563,7 @@ export default function AddMember({ onBack, memberId = null }) {
                 <Select
                   label="Membership Plan"
                   value={formData.membership_plan_id}
-                  onChange={(event) =>
-                    updateField("membership_plan_id", event.target.value)
-                  }
+                  onChange={(event) => handlePlanChange(event.target.value)}
                   options={[
                     { label: "Select Plan", value: "" },
                     ...plans.map((plan) => ({
@@ -544,19 +625,31 @@ export default function AddMember({ onBack, memberId = null }) {
                   label="Start Date"
                   type="date"
                   value={formData.start_date}
-                  onChange={(event) =>
-                    updateField("start_date", event.target.value)
-                  }
+                  max={formData.expiry_date || undefined}
+                  onChange={(event) => handleStartDateChange(event.target.value)}
                 />
                 <Input
                   icon={Calendar}
                   label="Expiry Date"
                   type="date"
                   value={formData.expiry_date}
-                  onChange={(event) =>
-                    updateField("expiry_date", event.target.value)
-                  }
+                  min={formData.start_date || undefined}
+                  onChange={(event) => handleExpiryDateChange(event.target.value)}
                 />
+                <div className="md:col-span-2 rounded-2xl border border-[#C8A13A]/30 bg-[#C8A13A]/10 px-4 py-3 text-sm text-gray-300">
+                  {selectedPlan ? (
+                    <>
+                      <span className="font-bold text-[#C8A13A]">
+                        {selectedPlan.name}
+                      </span>{" "}
+                      uses a {planCycleLabel(selectedPlan)} cycle. Expiry is
+                      calculated from the start date, but you can still edit it
+                      manually.
+                    </>
+                  ) : (
+                    "Select a membership plan to auto-calculate the expiry date."
+                  )}
+                </div>
                 <Input
                   icon={CreditCard}
                   label="Amount Paid"
@@ -702,6 +795,66 @@ function dateInputValue(value) {
   return String(value).slice(0, 10);
 }
 
+function todayInputValue() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function calculateExpiryDate(startDateValue, plan) {
+  if (!startDateValue || !plan) return "";
+
+  const startDate = parseDateInput(startDateValue);
+  if (!startDate) return "";
+
+  const daysToAdd = planDurationDays(plan);
+  startDate.setDate(startDate.getDate() + daysToAdd);
+
+  return formatDateInput(startDate);
+}
+
+function planDurationDays(plan) {
+  const quantity = Math.max(1, Number(plan.duration_days || 1));
+  const cycle = String(plan.billing_cycle || "").trim().toLowerCase();
+
+  if (cycle === "daily") return Math.max(0, quantity - 1);
+  if (cycle === "weekly") return quantity >= 7 ? quantity : quantity * 7;
+  if (cycle === "monthly") return quantity >= 28 ? quantity : quantity * 30;
+  if (cycle === "quarterly") return quantity >= 90 ? quantity : quantity * 90;
+  if (cycle === "half year" || cycle === "half-year" || cycle === "semi-annual") {
+    return quantity >= 180 ? quantity : quantity * 180;
+  }
+  if (cycle === "yearly" || cycle === "annual") {
+    return quantity >= 365 ? quantity : quantity * 365;
+  }
+
+  return quantity;
+}
+
+function planCycleLabel(plan) {
+  const cycle = plan?.billing_cycle || "custom";
+  const days = planDurationDays(plan);
+
+  if (String(cycle).toLowerCase() === "daily" && days === 0) {
+    return "1 calendar day";
+  }
+
+  return `${cycle} (${days} day${days === 1 ? "" : "s"})`;
+}
+
+function parseDateInput(value) {
+  const match = String(value || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return null;
+
+  return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+}
+
+function formatDateInput(value) {
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
+
 function Section({ title, children }) {
   return (
     <div className="bg-[#111] border border-white/10 rounded-3xl p-6">
@@ -718,6 +871,8 @@ function Input({
   type = "text",
   value,
   onChange,
+  min,
+  max,
 }) {
   return (
     <div>
@@ -729,6 +884,8 @@ function Input({
           placeholder={placeholder}
           value={value}
           onChange={onChange}
+          min={min}
+          max={max}
           className="w-full bg-transparent outline-none py-4 text-white placeholder:text-gray-600"
         />
       </div>

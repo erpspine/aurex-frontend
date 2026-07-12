@@ -172,6 +172,7 @@ export default function Members({ onNavigate, onLogout }) {
             ${detailCard("Membership Plan", member.membership_plan?.name || "No plan")}
             ${detailCard("Turnstile Card", member.access_code || "Not linked")}
             ${detailCard("Expiry Date", formatDate(member.expiry_date))}
+            ${detailCard("Days Before Expiry", formatDaysBeforeExpiry(member.expiry_date))}
             ${detailCard("Start Date", formatDate(member.start_date))}
             ${detailCard("Amount Paid", formatCurrency(member.amount_paid))}
           </div>
@@ -488,7 +489,7 @@ export default function Members({ onNavigate, onLogout }) {
 
         <div className="bg-[#111] border border-white/10 rounded-3xl overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1050px] text-left">
+            <table className="w-full min-w-[1150px] text-left">
               <thead className="bg-[#0A0A0A] text-gray-400 text-sm">
                 <tr>
                   <th className="p-5">Member</th>
@@ -497,6 +498,7 @@ export default function Members({ onNavigate, onLogout }) {
                   <th className="p-5">Access Card</th>
                   <th className="p-5">Controller Push</th>
                   <th className="p-5">Expiry Date</th>
+                  <th className="p-5">Days Left</th>
                   <th className="p-5">Payment</th>
                   <th className="p-5 text-right">Actions</th>
                 </tr>
@@ -505,7 +507,7 @@ export default function Members({ onNavigate, onLogout }) {
               <tbody>
                 {isLoading && (
                   <tr>
-                    <td className="p-8 text-center text-gray-400" colSpan="8">
+                    <td className="p-8 text-center text-gray-400" colSpan="9">
                       Loading members...
                     </td>
                   </tr>
@@ -513,7 +515,7 @@ export default function Members({ onNavigate, onLogout }) {
 
                 {!isLoading && error && (
                   <tr>
-                    <td className="p-8 text-center text-red-300" colSpan="8">
+                    <td className="p-8 text-center text-red-300" colSpan="9">
                       {error}
                     </td>
                   </tr>
@@ -521,7 +523,7 @@ export default function Members({ onNavigate, onLogout }) {
 
                 {!isLoading && !error && filteredMembers.length === 0 && (
                   <tr>
-                    <td className="p-8 text-center text-gray-400" colSpan="8">
+                    <td className="p-8 text-center text-gray-400" colSpan="9">
                       No members found.
                     </td>
                   </tr>
@@ -595,6 +597,10 @@ export default function Members({ onNavigate, onLogout }) {
                       </td>
 
                       <td className="p-5">
+                        <DaysBeforeExpiryBadge expiryDate={member.expiry_date} />
+                      </td>
+
+                      <td className="p-5">
                         <span
                           className={`px-3 py-1 rounded-full text-xs font-bold ${
                             member.payment_status === "Paid"
@@ -649,6 +655,36 @@ function formatDate(value) {
     month: "short",
     year: "numeric",
   }).format(new Date(value));
+}
+
+function daysBeforeExpiry(value) {
+  if (!value) return null;
+
+  const expiry = parseDateOnly(value);
+  if (!expiry) return null;
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  return Math.ceil((expiry.getTime() - today.getTime()) / 86400000);
+}
+
+function formatDaysBeforeExpiry(value) {
+  const days = daysBeforeExpiry(value);
+
+  if (days === null) return "Not set";
+  if (days < 0) return `Expired ${Math.abs(days)} day${Math.abs(days) === 1 ? "" : "s"} ago`;
+  if (days === 0) return "Expires today";
+
+  return `${days} day${days === 1 ? "" : "s"} left`;
+}
+
+function parseDateOnly(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+
+  date.setHours(0, 0, 0, 0);
+  return date;
 }
 
 function formatCurrency(value) {
@@ -711,6 +747,27 @@ function StatCard({ icon: Icon, title, value }) {
       <p className="text-gray-400 text-sm">{title}</p>
       <h3 className="text-2xl font-black mt-1">{value}</h3>
     </div>
+  );
+}
+
+function DaysBeforeExpiryBadge({ expiryDate }) {
+  const days = daysBeforeExpiry(expiryDate);
+
+  let className = "bg-gray-500/15 text-gray-300";
+  if (days === null) {
+    className = "bg-gray-500/15 text-gray-300";
+  } else if (days < 0) {
+    className = "bg-red-500/15 text-red-400";
+  } else if (days <= 7) {
+    className = "bg-orange-500/15 text-orange-400";
+  } else {
+    className = "bg-green-500/15 text-green-400";
+  }
+
+  return (
+    <span className={`px-3 py-1 rounded-full text-xs font-bold ${className}`}>
+      {formatDaysBeforeExpiry(expiryDate)}
+    </span>
   );
 }
 
