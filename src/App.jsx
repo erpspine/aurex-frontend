@@ -23,6 +23,7 @@ import Equipment from './pages/Equipment'
 import Exercises from './pages/Exercises'
 import Login from './pages/Login'
 import ManualCheckIn from './pages/ManualCheckIn'
+import MemberDashboard from './pages/MemberDashboard'
 import Members from './pages/Members'
 import MembershipPlans from './pages/MembershipPlans'
 import MobileApp from './pages/MobileApp'
@@ -43,6 +44,7 @@ function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(
     () => Boolean(localStorage.getItem(authTokenKey)),
   )
+  const [authUser, setAuthUser] = useState(() => readStoredUser())
   const [page, setPage] = useState('dashboard')
   const [selectedPlanId, setSelectedPlanId] = useState(null)
   const [selectedMemberId, setSelectedMemberId] = useState(null)
@@ -58,6 +60,7 @@ function App() {
   const handleLogin = (payload) => {
     localStorage.setItem(authTokenKey, payload.token)
     localStorage.setItem(authUserKey, JSON.stringify(payload.user))
+    setAuthUser(payload.user)
     setIsLoggedIn(true)
     setPage('dashboard')
   }
@@ -81,12 +84,37 @@ function App() {
 
     localStorage.removeItem(authTokenKey)
     localStorage.removeItem(authUserKey)
+    setAuthUser(null)
     setIsLoggedIn(false)
     setPage('dashboard')
   }, [])
 
   if (!isLoggedIn) {
     return <Login onLogin={handleLogin} />
+  }
+
+  const memberMode = isMemberUser(authUser)
+  const navigate = (nextPage) => {
+    if (memberMode && !['dashboard', 'workouts'].includes(nextPage)) {
+      setPage('dashboard')
+      return
+    }
+
+    setPage(nextPage)
+  }
+
+  if (memberMode && !['dashboard', 'workouts'].includes(page)) {
+    setPage('dashboard')
+    return null
+  }
+
+  if (memberMode && page === 'dashboard') {
+    return (
+      <MemberDashboard
+        onNavigate={navigate}
+        onLogout={handleLogout}
+      />
+    )
   }
 
   if (page === 'members') {
@@ -339,10 +367,15 @@ function App() {
     return (
       <Workouts
         onNavigate={(nextPage, workoutId = null) => {
+          if (memberMode && nextPage !== 'workouts' && nextPage !== 'dashboard') {
+            navigate(nextPage)
+            return
+          }
           setSelectedWorkoutId(workoutId)
-          setPage(nextPage)
+          navigate(nextPage)
         }}
         onLogout={handleLogout}
+        memberMode={memberMode}
       />
     )
   }
@@ -459,10 +492,26 @@ function App() {
 
   return (
     <Dashboard
-      onNavigate={setPage}
+      onNavigate={navigate}
       onLogout={handleLogout}
     />
   )
+}
+
+function readStoredUser() {
+  try {
+    const value = localStorage.getItem(authUserKey)
+    return value ? JSON.parse(value) : null
+  } catch {
+    return null
+  }
+}
+
+function isMemberUser(user) {
+  const role = String(user?.role || '').trim().toLowerCase()
+  const userType = String(user?.user_type || '').trim().toLowerCase()
+
+  return role === 'member' || userType === 'member'
 }
 
 export default App

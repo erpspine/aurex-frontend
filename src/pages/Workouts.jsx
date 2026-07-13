@@ -49,6 +49,11 @@ const menuItems = [
   { id: 'settings', name: 'Settings', icon: Settings },
 ]
 
+const memberMenuItems = [
+  { id: 'dashboard', name: 'My Information', icon: LayoutDashboard },
+  { id: 'workouts', name: 'My Workouts', icon: Activity },
+]
+
 const goals = [
   'All Goals',
   'Weight Loss',
@@ -58,12 +63,13 @@ const goals = [
   'General Fitness',
 ]
 
-export default function Workouts({ onNavigate, onLogout }) {
+export default function Workouts({ onNavigate, onLogout, memberMode = false }) {
   const [workouts, setWorkouts] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
   const [goalFilter, setGoalFilter] = useState('All Goals')
+  const visibleMenuItems = memberMode ? memberMenuItems : menuItems
 
   useEffect(() => {
     let shouldUpdate = true
@@ -298,7 +304,7 @@ export default function Workouts({ onNavigate, onLogout }) {
         </div>
 
         <nav className="space-y-1 flex-1 overflow-y-auto pr-1">
-          {menuItems.map((item) => {
+          {visibleMenuItems.map((item) => {
             const Icon = item.icon
             const active = item.id === 'workouts'
 
@@ -339,7 +345,7 @@ export default function Workouts({ onNavigate, onLogout }) {
       <main className="flex-1 min-w-0 bg-gradient-to-br from-[#050505] via-[#080808] to-[#111] p-5 sm:p-8 overflow-y-auto">
         <div className="lg:hidden bg-[#090909] border border-white/10 rounded-3xl p-3 mb-6 overflow-x-auto">
           <div className="flex gap-2 min-w-max">
-            {menuItems.slice(0, 7).map((item) => {
+            {visibleMenuItems.map((item) => {
               const Icon = item.icon
               const active = item.id === 'workouts'
 
@@ -366,18 +372,22 @@ export default function Workouts({ onNavigate, onLogout }) {
           <div>
             <h1 className="text-4xl font-black">Workouts</h1>
             <p className="text-gray-400 mt-1">
-              Create and manage workout programs for the mobile app.
+              {memberMode
+                ? 'View workouts assigned to your membership profile.'
+                : 'Create and manage workout programs for the mobile app.'}
             </p>
           </div>
 
-          <button
-            type="button"
-            onClick={() => onNavigate('add-workout')}
-            className="bg-[#C8A13A] text-black font-bold px-5 py-3 rounded-2xl flex items-center justify-center gap-2"
-          >
-            <Plus size={18} />
-            Add Workout
-          </button>
+          {!memberMode && (
+            <button
+              type="button"
+              onClick={() => onNavigate('add-workout')}
+              className="bg-[#C8A13A] text-black font-bold px-5 py-3 rounded-2xl flex items-center justify-center gap-2"
+            >
+              <Plus size={18} />
+              Add Workout
+            </button>
+          )}
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5 mb-8">
@@ -518,17 +528,21 @@ export default function Workouts({ onNavigate, onLogout }) {
                             label="View workout"
                             onClick={() => handleViewWorkout(item)}
                           />
-                          <ActionButton
-                            icon={Edit}
-                            label="Edit workout"
-                            onClick={() => onNavigate('edit-workout', item.id)}
-                          />
-                          <ActionButton
-                            icon={Trash2}
-                            label="Delete workout"
-                            danger
-                            onClick={() => handleDeleteWorkout(item)}
-                          />
+                          {!memberMode && (
+                            <>
+                              <ActionButton
+                                icon={Edit}
+                                label="Edit workout"
+                                onClick={() => onNavigate('edit-workout', item.id)}
+                              />
+                              <ActionButton
+                                icon={Trash2}
+                                label="Delete workout"
+                                danger
+                                onClick={() => handleDeleteWorkout(item)}
+                              />
+                            </>
+                          )}
                         </div>
                       </td>
                     </tr>
