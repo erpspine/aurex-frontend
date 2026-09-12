@@ -13,6 +13,7 @@ import {
   Filter,
   LayoutDashboard,
   LogOut,
+  RotateCw,
   Search,
   Settings,
   ShieldCheck,
@@ -51,6 +52,7 @@ const periodMap = {
   Today: "today",
   "This Week": "week",
   "This Month": "month",
+  Custom: "custom",
 };
 
 export default function Attendance({ onNavigate, onLogout }) {
@@ -65,16 +67,43 @@ export default function Attendance({ onNavigate, onLogout }) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
-  const [periodFilter, setPeriodFilter] = useState("Today");
+  const [periodFilter, setPeriodFilter] = useState("This Week");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
   const [lastSyncedAt, setLastSyncedAt] = useState(null);
 
-  const loadAttendance = async () => {
+  const loadAttendance = async (options = { force: false }) => {
+    const selectedPeriod = periodMap[periodFilter] || "today";
+    const params = new URLSearchParams({ period: selectedPeriod });
+
+    if (selectedPeriod === "custom") {
+      if (!fromDate || !toDate) {
+        if (options.force) {
+          setError("Please select both From and To dates.");
+        }
+        return;
+      }
+
+      if (!isPickerDateValue(fromDate) || !isPickerDateValue(toDate)) {
+        setError("Invalid date selected.");
+        return;
+      }
+
+      if (fromDate > toDate) {
+        setError("From date cannot be after To date.");
+        return;
+      }
+
+      params.set("from", fromDate);
+      params.set("to", toDate);
+    }
+
     setIsLoading(true);
     setError("");
 
     try {
       const response = await fetch(
-        `${apiBaseUrl}/attendance?period=${periodMap[periodFilter]}`,
+        `${apiBaseUrl}/attendance?${params.toString()}`,
         {
           headers: {
             Accept: "application/json",
@@ -105,15 +134,6 @@ export default function Attendance({ onNavigate, onLogout }) {
 
   useEffect(() => {
     loadAttendance();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [periodFilter]);
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      loadAttendance();
-    }, 10000);
-
-    return () => clearInterval(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [periodFilter]);
 
@@ -303,7 +323,7 @@ export default function Attendance({ onNavigate, onLogout }) {
 
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 mb-6">
           <div className="xl:col-span-2 bg-[#111] border border-white/10 rounded-3xl p-5">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
               <div className="md:col-span-2 flex items-center gap-3 bg-[#050505] border border-white/10 rounded-2xl px-4 py-3">
                 <Search size={20} className="text-gray-500 shrink-0" />
                 <input
@@ -319,15 +339,40 @@ export default function Attendance({ onNavigate, onLogout }) {
                 onChange={(event) => setPeriodFilter(event.target.value)}
                 className="appearance-none bg-[#050505] border border-white/10 rounded-2xl px-4 py-3 text-gray-300 outline-none [color-scheme:dark]"
               >
-                {["Today", "This Week", "This Month"].map((item) => (
+                {["Today", "This Week", "This Month", "Custom"].map((item) => (
                   <option key={item} className="bg-[#050505] text-white">
                     {item}
                   </option>
                 ))}
               </select>
 
+              {periodFilter === "Custom" && (
+                <div className="md:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <input
+                    type="date"
+                    value={fromDate}
+                    onChange={(event) => setFromDate(event.target.value)}
+                    max={toDate || undefined}
+                    aria-label="From date"
+                    className="bg-[#050505] border border-white/10 rounded-2xl px-4 py-3 text-gray-300 outline-none"
+                  />
+                  <input
+                    type="date"
+                    value={toDate}
+                    onChange={(event) => setToDate(event.target.value)}
+                    min={fromDate || undefined}
+                    aria-label="To date"
+                    className="bg-[#050505] border border-white/10 rounded-2xl px-4 py-3 text-gray-300 outline-none"
+                  />
+                  <p className="sm:col-span-2 text-xs text-gray-500">
+                    Range: {formatPickerDate(fromDate)} to {formatPickerDate(toDate)}
+                  </p>
+                </div>
+              )}
+
               <button
                 type="button"
+                onClick={() => loadAttendance({ force: true })}
                 className="border border-white/10 px-5 py-3 rounded-2xl flex items-center justify-center gap-2 text-gray-300 hover:border-[#C8A13A]"
               >
                 <Filter size={18} />
@@ -372,13 +417,24 @@ export default function Attendance({ onNavigate, onLogout }) {
               {filteredAttendances.length} records
             </span>
           </div>
-          <div className="px-5 pb-4 -mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-500">
-            <span>
-              Last synced{" "}
-              {lastSyncedAt ? formatRelativeTime(lastSyncedAt) : "never"}
-            </span>
-            {lastSyncedAt && <span className="text-gray-700">•</span>}
-            <span>Auto-refreshes every 10 seconds.</span>
+          <div className="px-5 pb-4 -mt-1 flex flex-wrap items-center justify-between gap-3 text-xs text-gray-500">
+            <div className="flex flex-wrap items-center gap-2">
+              <span>
+                Last synced{" "}
+                {lastSyncedAt ? formatRelativeTime(lastSyncedAt) : "never"}
+              </span>
+              {lastSyncedAt && <span className="text-gray-700">•</span>}
+              <span>Use Refresh to load latest records.</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => loadAttendance({ force: true })}
+              disabled={isLoading}
+              className="inline-flex items-center gap-2 rounded-xl border border-white/15 px-3 py-2 text-xs font-semibold text-gray-200 hover:border-[#C8A13A] hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <RotateCw size={14} className={isLoading ? "animate-spin" : ""} />
+              Refresh
+            </button>
           </div>
 
           <div className="overflow-x-auto">
@@ -477,7 +533,7 @@ export default function Attendance({ onNavigate, onLogout }) {
                     >
                       <div className="max-w-xl mx-auto space-y-2">
                         <p className="text-white font-bold text-lg">
-                          No attendance records synced yet.
+                          No attendance records for {periodFilter.toLowerCase()}.
                         </p>
                         <p className="text-sm leading-6">
                           If you just used the card on the controller, make sure
@@ -485,7 +541,7 @@ export default function Attendance({ onNavigate, onLogout }) {
                           <span className="text-[#C8A13A]">CardEvent</span>{" "}
                           callbacks to the sync agent at{" "}
                           <span className="text-[#C8A13A]">
-                            /api/controller/callback
+                            /api/sync/attendance
                           </span>
                           .
                         </p>
@@ -576,13 +632,28 @@ function SourceBadge({ entryMethod, agentId }) {
 function formatDateTime(value) {
   if (!value) return "-";
 
-  return new Intl.DateTimeFormat("en-GB", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(value));
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) return "-";
+
+  const day = String(date.getDate()).padStart(2, "0");
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const year = date.getFullYear();
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+
+  return `${day}/${month}/${year} ${hours}:${minutes}`;
+}
+
+function isPickerDateValue(value) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
+
+function formatPickerDate(value) {
+  if (!isPickerDateValue(value)) return "dd/mm/yyyy";
+
+  const [year, month, day] = value.split("-");
+  return `${day}/${month}/${year}`;
 }
 
 function durationText(row) {

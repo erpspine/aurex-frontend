@@ -6,6 +6,7 @@ import {
   CalendarDays,
   CheckCircle,
   CreditCard,
+  Pencil,
   Plus,
   Save,
   ShieldCheck,
@@ -129,10 +130,47 @@ export default function AddPlan({ onBack, planId = null }) {
     }))
   }
 
-  const removeBenefit = (benefit) => {
+  const removeBenefit = (index) => {
     setFormData((current) => ({
       ...current,
-      benefits: current.benefits.filter((item) => item !== benefit),
+      benefits: current.benefits.filter((_, currentIndex) => currentIndex !== index),
+    }))
+  }
+
+  const editBenefit = async (index) => {
+    const currentValue = formData.benefits[index] || ''
+
+    const result = await Swal.fire({
+      title: 'Edit benefit',
+      input: 'text',
+      inputLabel: 'Benefit value',
+      inputValue: currentValue,
+      showCancelButton: true,
+      confirmButtonText: 'Save',
+      background: '#101010',
+      color: '#ffffff',
+      confirmButtonColor: '#C8A13A',
+      cancelButtonColor: '#2a2a2a',
+      inputValidator: (value) => {
+        if (!value.trim()) {
+          return 'Benefit cannot be empty.'
+        }
+
+        return undefined
+      },
+    })
+
+    if (!result.isConfirmed) {
+      return
+    }
+
+    const updatedValue = result.value.trim()
+
+    setFormData((current) => ({
+      ...current,
+      benefits: current.benefits.map((item, currentIndex) => (
+        currentIndex === index ? updatedValue : item
+      )),
     }))
   }
 
@@ -364,11 +402,12 @@ export default function AddPlan({ onBack, planId = null }) {
 
           <Section title="Benefits & Access">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {formData.benefits.map((item) => (
+              {formData.benefits.map((item, index) => (
                 <BenefitRow
-                  key={item}
+                  key={`${item}-${index}`}
                   label={item}
-                  onRemove={() => removeBenefit(item)}
+                  onEdit={() => editBenefit(index)}
+                  onRemove={() => removeBenefit(index)}
                 />
               ))}
             </div>
@@ -624,20 +663,31 @@ function TextArea({ label, placeholder, value, onChange }) {
   )
 }
 
-function BenefitRow({ label, onRemove }) {
+function BenefitRow({ label, onEdit, onRemove }) {
   return (
     <div className="flex items-center justify-between gap-4 bg-[#050505] border border-white/10 rounded-2xl px-4 py-4">
       <div className="flex items-center gap-3 min-w-0">
         <CheckCircle size={18} className="text-[#C8A13A] shrink-0" />
         <span className="font-medium truncate">{label}</span>
       </div>
-      <button
-        type="button"
-        onClick={onRemove}
-        className="w-9 h-9 rounded-xl flex items-center justify-center text-red-400 hover:bg-red-500/10 shrink-0"
-      >
-        <Trash2 size={16} />
-      </button>
+      <div className="flex items-center gap-2 shrink-0">
+        <button
+          type="button"
+          onClick={onEdit}
+          className="w-9 h-9 rounded-xl flex items-center justify-center text-[#C8A13A] hover:bg-[#C8A13A]/10"
+          aria-label="Edit benefit"
+        >
+          <Pencil size={16} />
+        </button>
+        <button
+          type="button"
+          onClick={onRemove}
+          className="w-9 h-9 rounded-xl flex items-center justify-center text-red-400 hover:bg-red-500/10"
+          aria-label="Remove benefit"
+        >
+          <Trash2 size={16} />
+        </button>
+      </div>
     </div>
   )
 }

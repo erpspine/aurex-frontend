@@ -105,6 +105,24 @@ const defaultSettings = {
     allow_staff_account_creation: true,
     trainer_content_access: 'Create & Edit',
     payment_permission: 'Admin & Manager',
+    page_access: {
+      dashboard: { Admin: 'Full Access', Manager: 'Full Access', Trainer: 'Full Access', Receptionist: 'Full Access' },
+      members: { Admin: 'Full Access', Manager: 'Full Access', Trainer: 'Read Only', Receptionist: 'Full Access' },
+      plans: { Admin: 'Full Access', Manager: 'Full Access', Trainer: 'No Access', Receptionist: 'No Access' },
+      trainers: { Admin: 'Full Access', Manager: 'Full Access', Trainer: 'Full Access', Receptionist: 'No Access' },
+      exercises: { Admin: 'Full Access', Manager: 'Full Access', Trainer: 'Read Only', Receptionist: 'No Access' },
+      equipment: { Admin: 'Full Access', Manager: 'Full Access', Trainer: 'No Access', Receptionist: 'No Access' },
+      workouts: { Admin: 'Full Access', Manager: 'Full Access', Trainer: 'Full Access', Receptionist: 'No Access' },
+      levels: { Admin: 'Full Access', Manager: 'Full Access', Trainer: 'No Access', Receptionist: 'No Access' },
+      diet: { Admin: 'Full Access', Manager: 'Full Access', Trainer: 'Read Only', Receptionist: 'No Access' },
+      classes: { Admin: 'Full Access', Manager: 'Full Access', Trainer: 'Read Only', Receptionist: 'Full Access' },
+      attendance: { Admin: 'Full Access', Manager: 'Full Access', Trainer: 'Read Only', Receptionist: 'Full Access' },
+      payments: { Admin: 'Full Access', Manager: 'Full Access', Trainer: 'No Access', Receptionist: 'Full Access' },
+      reports: { Admin: 'Full Access', Manager: 'Full Access', Trainer: 'No Access', Receptionist: 'No Access' },
+      users: { Admin: 'Full Access', Manager: 'No Access', Trainer: 'No Access', Receptionist: 'No Access' },
+      settings: { Admin: 'Full Access', Manager: 'No Access', Trainer: 'No Access', Receptionist: 'No Access' },
+      mobile: { Admin: 'Full Access', Manager: 'No Access', Trainer: 'No Access', Receptionist: 'No Access' },
+    },
   },
   security: {
     two_factor_authentication: 'Disabled',
@@ -207,6 +225,22 @@ export default function Settings({ onNavigate, onLogout }) {
       [section]: {
         ...current[section],
         [field]: value,
+      },
+    }))
+  }
+
+  const updateRolePermission = (pageKey, roleKey, value) => {
+    setSettings((current) => ({
+      ...current,
+      users_roles: {
+        ...current.users_roles,
+        page_access: {
+          ...(current.users_roles?.page_access || {}),
+          [pageKey]: {
+            ...(current.users_roles?.page_access?.[pageKey] || {}),
+            [roleKey]: value,
+          },
+        },
       },
     }))
   }
@@ -971,6 +1005,70 @@ export default function Settings({ onNavigate, onLogout }) {
                     }
                     options={['Admin Only', 'Admin & Manager', 'All Staff']}
                   />
+                </div>
+
+                <div className="mt-6 rounded-3xl border border-white/10 bg-[#050505] p-4">
+                  <div className="flex items-center justify-between gap-3 mb-4">
+                    <div>
+                      <h3 className="font-bold text-white">Page Access Matrix</h3>
+                      <p className="text-sm text-gray-500 mt-1">
+                        Control which pages each staff role can open.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full text-sm">
+                      <thead>
+                        <tr className="text-left text-gray-500">
+                          <th className="pb-3 pr-3">Page</th>
+                          <th className="pb-3 pr-3">Admin</th>
+                          <th className="pb-3 pr-3">Manager</th>
+                          <th className="pb-3 pr-3">Trainer</th>
+                          <th className="pb-3">Receptionist</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {[
+                          ['dashboard', 'Dashboard'],
+                          ['members', 'Members'],
+                          ['plans', 'Membership Plans'],
+                          ['trainers', 'Trainers'],
+                          ['exercises', 'Exercises'],
+                          ['equipment', 'Equipment'],
+                          ['workouts', 'Workouts'],
+                          ['levels', 'Workout Levels'],
+                          ['diet', 'Diet Plans'],
+                          ['classes', 'Classes'],
+                          ['attendance', 'Attendance'],
+                          ['payments', 'Payments'],
+                          ['reports', 'Reports'],
+                          ['users', 'Users & Roles'],
+                          ['settings', 'Settings'],
+                          ['mobile', 'Mobile App'],
+                        ].map(([pageKey, pageLabel]) => (
+                          <tr key={pageKey} className="border-t border-white/10">
+                            <td className="py-3 pr-3 text-gray-300">{pageLabel}</td>
+                            {['Admin', 'Manager', 'Trainer', 'Receptionist'].map((roleKey) => (
+                              <td key={`${pageKey}-${roleKey}`} className="py-3 pr-3">
+                                <select
+                                  value={settings.users_roles?.page_access?.[pageKey]?.[roleKey] || 'Full Access'}
+                                  onChange={(event) =>
+                                    updateRolePermission(pageKey, roleKey, event.target.value)
+                                  }
+                                  className="w-full appearance-none bg-[#111] border border-white/10 rounded-xl px-3 py-2 text-white outline-none [color-scheme:dark]"
+                                >
+                                  <option value="Full Access">Full Access</option>
+                                  <option value="Read Only">Read Only</option>
+                                  <option value="No Access">No Access</option>
+                                </select>
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </Section>
             )}

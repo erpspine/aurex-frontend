@@ -85,7 +85,46 @@ select:-webkit-autofill {
   padding: 0 6px;
 }
 
+@media (min-width: 1024px) {
+  body.aurex-sidebar-collapsed aside.hidden.lg\:flex {
+    width: 6rem !important;
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+    transition: width 0.25s ease;
+  }
+
+  body.aurex-sidebar-collapsed aside.hidden.lg\:flex nav button {
+    justify-content: center;
+    padding-left: 0;
+    padding-right: 0;
+  }
+
+  body.aurex-sidebar-collapsed aside.hidden.lg\:flex nav button span {
+    display: none;
+  }
+
+  body.aurex-sidebar-collapsed aside.hidden.lg\:flex>div.mb-8 {
+    text-align: center;
+  }
+
+  body.aurex-sidebar-collapsed aside.hidden.lg\:flex>div.mb-8 p {
+    display: none;
+  }
+
+  body.aurex-sidebar-collapsed aside.hidden.lg\:flex>div.mt-6 {
+    display: none;
+  }
+
+  body.aurex-sidebar-collapsed aside.hidden.lg\:flex>button.mt-5 {
+    justify-content: center;
+    padding-left: 0;
+    padding-right: 0;
+    font-size: 0;
+  }
+}
+
 @media (max-width: 640px) {
+
   .aurex-member-modal,
   .aurex-equipment-modal,
   .aurex-trainer-modal {

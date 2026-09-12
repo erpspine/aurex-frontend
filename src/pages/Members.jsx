@@ -13,6 +13,7 @@ import {
   Filter,
   LayoutDashboard,
   LogOut,
+  MessageSquare,
   Plus,
   Search,
   Settings,
@@ -345,6 +346,65 @@ export default function Members({ onNavigate, onLogout }) {
     }
   };
 
+  const handleSendExpiryReminder = async (member) => {
+    const confirmation = await Swal.fire({
+      title: "Send expiry reminder SMS?",
+      html: `
+        <div style="text-align:left;color:#d1d5db;line-height:1.6">
+          <div><strong style="color:#fff">Member:</strong> ${escapeHtml(member.full_name)}</div>
+          <div><strong style="color:#fff">Phone:</strong> ${escapeHtml(member.phone || "Not set")}</div>
+          <div><strong style="color:#fff">Expiry Date:</strong> ${escapeHtml(formatDate(member.expiry_date))}</div>
+        </div>
+      `,
+      icon: "question",
+      showCancelButton: true,
+      confirmButtonText: "Send SMS",
+      cancelButtonText: "Cancel",
+      background: "#101010",
+      color: "#ffffff",
+      confirmButtonColor: "#C8A13A",
+      cancelButtonColor: "#2a2a2a",
+    });
+
+    if (!confirmation.isConfirmed) return;
+
+    try {
+      const response = await fetch(
+        `${apiBaseUrl}/members/${member.id}/send-expiry-reminder`,
+        {
+          method: "POST",
+          headers: {
+            Accept: "application/json",
+            Authorization: `Bearer ${localStorage.getItem("aurex_admin_token")}`,
+          },
+        },
+      );
+      const payload = await response.json();
+
+      if (!response.ok) {
+        throw new Error(payload.message || "Unable to send expiry reminder.");
+      }
+
+      await Swal.fire({
+        title: "SMS sent",
+        text: payload.message || "Expiry reminder SMS sent successfully.",
+        icon: "success",
+        background: "#101010",
+        color: "#ffffff",
+        confirmButtonColor: "#C8A13A",
+      });
+    } catch (caughtError) {
+      await Swal.fire({
+        title: "SMS failed",
+        text: caughtError.message || "Unable to send expiry reminder.",
+        icon: "error",
+        background: "#101010",
+        color: "#ffffff",
+        confirmButtonColor: "#C8A13A",
+      });
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#050505] text-white flex">
       <aside className="hidden lg:flex w-72 bg-[#090909] border-r border-white/10 p-5 flex-col">
@@ -628,6 +688,11 @@ export default function Members({ onNavigate, onLogout }) {
                               member.access_code ? "Replace card" : "Link card"
                             }
                             onClick={() => handleLinkCard(member)}
+                          />
+                          <ActionButton
+                            icon={MessageSquare}
+                            title="Send expiry reminder SMS"
+                            onClick={() => handleSendExpiryReminder(member)}
                           />
                           <ActionButton
                             icon={Trash2}

@@ -10,6 +10,7 @@ import {
   Dumbbell,
   LayoutDashboard,
   LogOut,
+  MessageSquare,
   PieChart,
   RefreshCw,
   Settings,
@@ -53,6 +54,7 @@ const periodOptions = [
 export default function Reports({ onNavigate, onLogout }) {
   const [period, setPeriod] = useState('month')
   const [report, setReport] = useState(null)
+  const [reminderReport, setReminderReport] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -61,24 +63,32 @@ export default function Reports({ onNavigate, onLogout }) {
     setError('')
 
     try {
-      const response = await fetch(`${apiBaseUrl}/reports?period=${period}`, {
-        headers: {
-          Accept: 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('aurex_admin_token')}`,
-        },
-      })
-      const payload = await response.json()
+      const headers = {
+        Accept: 'application/json',
+        Authorization: `Bearer ${localStorage.getItem('aurex_admin_token')}`,
+      }
 
-      if (!response.ok) {
-        if (response.status === 401) {
+      const [summaryResponse, remindersResponse] = await Promise.all([
+        fetch(`${apiBaseUrl}/reports?period=${period}`, { headers }),
+        fetch(`${apiBaseUrl}/reports/membership-reminders?period=${period}`, { headers }),
+      ])
+
+      const payload = await summaryResponse.json()
+      const remindersPayload = await remindersResponse.json()
+
+      if (!summaryResponse.ok || !remindersResponse.ok) {
+        if (summaryResponse.status === 401 || remindersResponse.status === 401) {
           onLogout()
           return
         }
 
-        throw new Error(payload.message || 'Unable to load reports.')
+        throw new Error(
+          payload.message || remindersPayload.message || 'Unable to load reports.',
+        )
       }
 
       setReport(payload)
+      setReminderReport(remindersPayload)
     } catch (caughtError) {
       setError(caughtError.message || 'Unable to load reports.')
     } finally {
@@ -95,6 +105,8 @@ export default function Reports({ onNavigate, onLogout }) {
   const revenueSeries = report?.revenue_series || []
   const attendanceSeries = report?.attendance_series || []
   const recentPayments = report?.recent_payments || []
+  const reminderSummary = report?.membership_reminders || {}
+  const reminders = reminderReport?.reminders || []
 
   const reportRange = useMemo(() => {
     if (!report?.period) return ''
@@ -195,6 +207,13 @@ export default function Reports({ onNavigate, onLogout }) {
           </div>
 
           <div className="flex flex-col sm:flex-row gap-3">
+            <button
+              type="button"
+              onClick={() => onNavigate('service-report')}
+              className="border border-[#C8A13A]/40 px-5 py-3 rounded-2xl text-[#C8A13A] hover:bg-[#C8A13A]/10"
+            >
+              Service Usage Report
+            </button>
             <div className="bg-[#111] border border-white/10 rounded-2xl p-1 flex">
               {periodOptions.map((option) => (
                 <button
@@ -254,6 +273,32 @@ export default function Reports({ onNavigate, onLogout }) {
             value={stats.check_ins || 0}
             loading={isLoading}
           />
+        </div>
+
+        <div className="bg-[#111] border border-white/10 rounded-3xl p-5 mb-8">
+          <SectionHeader
+            icon={MessageSquare}
+            title="SMS Reminders"
+            subtitle="Membership expiry renewal reminders (D-5 and D-1)."
+          />
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+            <MiniStatCard
+              label="Sent"
+              value={isLoading ? 'Loading...' : reminderSummary.sent || 0}
+            />
+            <MiniStatCard
+              label="Failed"
+              value={isLoading ? 'Loading...' : reminderSummary.failed || 0}
+            />
+            <MiniStatCard
+              label="D-5 Reminders"
+              value={isLoading ? 'Loading...' : reminderSummary.five_days || 0}
+            />
+            <MiniStatCard
+              label="D-1 Reminders"
+              value={isLoading ? 'Loading...' : reminderSummary.one_day || 0}
+            />
+          </div>
         </div>
 
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 mb-8">
@@ -406,7 +451,75 @@ export default function Reports({ onNavigate, onLogout }) {
             </table>
           </div>
         </div>
+
+        <div className="bg-[#111] border border-white/10 rounded-3xl overflow-hidden mt-8">
+          <div className="px-5 py-5 border-b border-white/10">
+            <h2 className="text-xl font-bold">Recent SMS Reminders</h2>
+            <p className="text-gray-500 text-sm mt-1">
+              Latest reminder messages sent for membership renewals.
+            </p>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[940px]">
+              <thead className="bg-[#050505] text-left text-xs uppercase tracking-wider text-gray-500">
+                <tr>
+                  <th className="px-5 py-4">Member</th>
+                  <th className="px-5 py-4">Phone</th>
+                  <th className="px-5 py-4">Expiry Date</th>
+                  <th className="px-5 py-4">Reminder</th>
+                  <th className="px-5 py-4">Status</th>
+                  <th className="px-5 py-4">Sent At</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/10">
+                {isLoading && (
+                  <tr>
+                    <td className="px-5 py-8 text-center text-gray-400" colSpan="6">
+                      Loading reminders...
+                    </td>
+                  </tr>
+                )}
+
+                {!isLoading && reminders.length === 0 && (
+                  <tr>
+                    <td className="px-5 py-8 text-center text-gray-400" colSpan="6">
+                      No SMS reminders found for this period.
+                    </td>
+                  </tr>
+                )}
+
+                {!isLoading && reminders.slice(0, 20).map((item) => (
+                  <tr key={item.id} className="hover:bg-white/[0.03]">
+                    <td className="px-5 py-5">
+                      <p className="font-bold">{item.member?.full_name || 'Member'}</p>
+                      <p className="text-gray-500 text-sm">{item.member?.email || 'No email'}</p>
+                    </td>
+                    <td className="px-5 py-5 text-gray-300">{item.phone}</td>
+                    <td className="px-5 py-5 text-gray-300">{formatDate(item.expiry_date)}</td>
+                    <td className="px-5 py-5 text-gray-300">D-{item.days_before_expiry}</td>
+                    <td className="px-5 py-5">
+                      <span className={`px-3 py-1 rounded-full text-xs font-bold ${statusClass(item.status)}`}>
+                        {item.status}
+                      </span>
+                    </td>
+                    <td className="px-5 py-5 text-gray-300">{formatDateTime(item.sent_at)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </main>
+    </div>
+  )
+}
+
+function MiniStatCard({ label, value }) {
+  return (
+    <div className="bg-[#0A0A0A] border border-white/10 rounded-2xl p-4">
+      <p className="text-gray-400 text-xs uppercase tracking-wide">{label}</p>
+      <p className="text-2xl font-black mt-2 text-[#C8A13A]">{value}</p>
     </div>
   )
 }
@@ -514,6 +627,13 @@ function MetricRow({ label, value }) {
   )
 }
 
+function statusClass(status) {
+  if (status === 'sent') return 'bg-green-500/15 text-green-400'
+  if (status === 'failed') return 'bg-red-500/15 text-red-300'
+  if (status === 'queued') return 'bg-blue-500/15 text-blue-300'
+  return 'bg-gray-500/15 text-gray-300'
+}
+
 function getPayerName(payment) {
   if (payment.payer_type === 'Member') {
     return payment.member?.full_name || 'Member'
@@ -547,5 +667,17 @@ function formatDate(value) {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
+  }).format(new Date(value))
+}
+
+function formatDateTime(value) {
+  if (!value) return 'Not sent'
+
+  return new Intl.DateTimeFormat('en-GB', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
   }).format(new Date(value))
 }

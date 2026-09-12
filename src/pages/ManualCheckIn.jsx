@@ -25,6 +25,9 @@ export default function ManualCheckIn({ onBack }) {
   const [members, setMembers] = useState([])
   const [selectedMember, setSelectedMember] = useState(null)
   const [searchTerm, setSearchTerm] = useState('')
+  const [serviceUsage, setServiceUsage] = useState([])
+  const [isServiceLoading, setIsServiceLoading] = useState(false)
+  const [selectedServiceName, setSelectedServiceName] = useState('')
   const [formData, setFormData] = useState({
     check_in_date: today,
     check_in_time: currentTime,
@@ -72,9 +75,111 @@ export default function ManualCheckIn({ onBack }) {
     }
   }, [searchTerm, selectedMember])
 
+  useEffect(() => {
+    if (!selectedMember?.id) {
+      setServiceUsage([])
+      return
+    }
+
+    let shouldUpdate = true
+
+    const loadServiceUsage = async () => {
+      setIsServiceLoading(true)
+
+      try {
+        const response = await fetch(`${apiBaseUrl}/member-service-usages?member_id=${selectedMember.id}`, {
+          headers: {
+            Accept: 'application/json',
+            Authorization: `Bearer ${localStorage.getItem('aurex_admin_token')}`,
+          },
+        })
+        const payload = await response.json()
+
+        if (!response.ok) {
+          throw new Error(payload.message || 'Unable to load service usage.')
+        }
+
+        if (shouldUpdate) {
+          setServiceUsage(payload.service_usages || [])
+        }
+      } catch {
+        if (shouldUpdate) {
+          setServiceUsage([])
+        }
+      } finally {
+        if (shouldUpdate) {
+          setIsServiceLoading(false)
+        }
+      }
+    }
+
+    loadServiceUsage()
+
+    return () => {
+      shouldUpdate = false
+    }
+  }, [selectedMember?.id])
+
   const selectedPlan = useMemo(
     () => selectedMember?.membership_plan?.name || selectedMember?.membership_status || 'Not set',
     [selectedMember],
+  )
+
+  const planBenefitEntries = useMemo(() => {
+    return getMemberPlanBenefits(selectedMember)
+      .map(parseServiceQuota)
+      .filter(Boolean)
+  }, [selectedMember])
+
+  const serviceRows = useMemo(() => {
+    const mergedRows = [...(serviceUsage || [])]
+    const existingKeys = new Set((serviceUsage || []).map((item) => getServiceKey(item.service_name)))
+
+    planBenefitEntries.forEach((entry) => {
+      const key = getServiceKey(entry.service_name)
+      if (!existingKeys.has(key)) {
+        mergedRows.push({
+          id: `plan-${key}`,
+          service_name: entry.service_name,
+          allowed_sessions: entry.allowed_sessions,
+          used_sessions: 0,
+        })
+      }
+    })
+
+    return mergedRows
+  }, [planBenefitEntries, serviceUsage])
+
+  const allocatedServices = useMemo(() => {
+    const uniqueEntries = []
+    const seen = new Set()
+
+    planBenefitEntries.forEach((entry) => {
+      const key = getServiceKey(entry.service_name)
+      if (key && !seen.has(key)) {
+        seen.add(key)
+        uniqueEntries.push(entry)
+      }
+    })
+
+    return uniqueEntries
+  }, [planBenefitEntries])
+
+  useEffect(() => {
+    if (!serviceRows.length) {
+      setSelectedServiceName('')
+      return
+    }
+
+    const stillExists = serviceRows.some((row) => getServiceKey(row.service_name) === selectedServiceName)
+    if (!stillExists) {
+      setSelectedServiceName(getServiceKey(serviceRows[0].service_name))
+    }
+  }, [serviceRows, selectedServiceName])
+
+  const selectedServiceRow = useMemo(
+    () => serviceRows.find((row) => getServiceKey(row.service_name) === selectedServiceName) || null,
+    [serviceRows, selectedServiceName],
   )
 
   const updateField = (field, value) => {
@@ -155,6 +260,157 @@ export default function ManualCheckIn({ onBack }) {
       })
     } finally {
       setIsSubmitting(false)
+    }
+  }
+
+  const handleConsumeService = async (serviceRow) => {
+    if (!selectedMember) {
+      return
+    }
+
+    if ((serviceRow.allowed_sessions || 0) <= (serviceRow.used_sessions || 0)) {
+      await Swal.fire({
+        title: 'Quota exhausted',
+        text: `${serviceRow.service_name} has no sessions left for this member.`,
+        icon: 'warning',
+        background: '#101010',
+        color: '#ffffff',
+        confirmButtonColor: '#C8A13A',
+      })
+      return
+    }
+
+    try {
+      const response = await fetch(`${apiBaseUrl}/member-service-usages/consume`, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          Authorization: `Bearer ${localStorage.getItem('aurex_admin_token')}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          member_id: selectedMember.id,
+          service_name: serviceRow.service_name,
+          quantity: 1,
+        }),
+      })
+      const payload = await response.json()
+
+      if (!response.ok) {
+        throw new Error(payload.message || 'Unable to record this session.')
+      }
+
+      setServiceUsage((current) => {
+        const nextItems = [...current]
+        const existingIndex = nextItems.findIndex((item) => item.service_name.toLowerCase() === serviceRow.service_name.toLowerCase())
+
+        if (existingIndex >= 0) {
+          nextItems[existingIndex] = payload.service_usage
+        } else {
+          nextItems.push(payload.service_usage)
+        }
+
+        return nextItems
+      })
+    } catch (caughtError) {
+      await Swal.fire({
+        title: 'Session update failed',
+        text: caughtError.message || 'Unable to record this session.',
+        icon: 'error',
+        background: '#101010',
+        color: '#ffffff',
+        confirmButtonColor: '#C8A13A',
+      })
+    }
+  }
+
+  const handleAddService = async () => {
+    if (!selectedMember) {
+      return
+    }
+
+    const availableServices = allocatedServices.filter(
+      (entry) => !serviceUsage.some((item) => getServiceKey(item.service_name) === getServiceKey(entry.service_name)),
+    )
+
+    if (availableServices.length === 0) {
+      await Swal.fire({
+        title: 'No available services',
+        text: 'All allocated services from this plan have already been added.',
+        icon: 'info',
+        background: '#101010',
+        color: '#ffffff',
+        confirmButtonColor: '#C8A13A',
+      })
+      return
+    }
+
+    const inputOptions = Object.fromEntries(
+      availableServices.map((entry) => [
+        getServiceKey(entry.service_name),
+        `${entry.service_name} (${entry.allowed_sessions} sessions)`,
+      ]),
+    )
+
+    const serviceNameResult = await Swal.fire({
+      title: 'Add service',
+      input: 'select',
+      inputLabel: 'Service name',
+      inputOptions,
+      inputPlaceholder: 'Select a plan-allocated service',
+      background: '#101010',
+      color: '#ffffff',
+      confirmButtonColor: '#C8A13A',
+      cancelButtonColor: '#2a2a2a',
+      showCancelButton: true,
+    })
+
+    if (!serviceNameResult.isConfirmed || !serviceNameResult.value) {
+      return
+    }
+
+    const selectedService = availableServices.find(
+      (entry) => getServiceKey(entry.service_name) === serviceNameResult.value,
+    )
+
+    if (!selectedService) {
+      return
+    }
+
+    try {
+      const response = await fetch(`${apiBaseUrl}/member-service-usages`, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          Authorization: `Bearer ${localStorage.getItem('aurex_admin_token')}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          member_id: selectedMember.id,
+          service_name: selectedService.service_name,
+          allowed_sessions: selectedService.allowed_sessions,
+          used_sessions: 0,
+        }),
+      })
+      const payload = await response.json()
+
+      if (!response.ok) {
+        throw new Error(payload.message || 'Unable to add this service.')
+      }
+
+      setServiceUsage((current) => {
+        const nextItems = current.filter((item) => item.service_name.toLowerCase() !== payload.service_usage.service_name.toLowerCase())
+        return [...nextItems, payload.service_usage]
+      })
+    } catch (caughtError) {
+      await Swal.fire({
+        title: 'Service add failed',
+        text: caughtError.message || 'Unable to add this service.',
+        icon: 'error',
+        background: '#101010',
+        color: '#ffffff',
+        confirmButtonColor: '#C8A13A',
+      })
     }
   }
 
@@ -340,6 +596,83 @@ export default function ManualCheckIn({ onBack }) {
             </div>
           </Section>
 
+          <Section title="Service Access Tracking">
+            <div className="flex items-center justify-between gap-3 mb-4">
+              <div>
+                <p className="text-sm text-gray-400">Choose a service from this member plan and record usage until the quota is exhausted.</p>
+              </div>
+              <button
+                type="button"
+                onClick={handleAddService}
+                className="px-3 py-2 rounded-xl border border-[#C8A13A]/40 text-[#C8A13A] text-sm font-semibold"
+              >
+                Add service
+              </button>
+            </div>
+
+            {isServiceLoading && (
+              <div className="text-sm text-gray-400">Loading service usage...</div>
+            )}
+
+            {!isServiceLoading && serviceRows.length === 0 && (
+              <div className="text-sm text-gray-500">No services are configured for this member yet.</div>
+            )}
+
+            {serviceRows.length > 0 && (
+              <div className="space-y-3 mt-4">
+                <div>
+                  <label className="text-sm text-gray-400 mb-2 block">Service from allocated benefits</label>
+                  <select
+                    value={selectedServiceName}
+                    onChange={(event) => setSelectedServiceName(event.target.value)}
+                    className="w-full appearance-none bg-[#050505] border border-white/10 rounded-2xl px-4 py-4 text-white outline-none [color-scheme:dark]"
+                  >
+                    {serviceRows.map((row) => (
+                      <option key={`${row.service_name}-${row.id}`} value={getServiceKey(row.service_name)} className="bg-[#050505] text-white">
+                        {row.service_name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {selectedServiceRow && (() => {
+                  const remaining = Math.max((selectedServiceRow.allowed_sessions || 0) - (selectedServiceRow.used_sessions || 0), 0)
+                  const exhausted = remaining <= 0
+
+                  return (
+                    <div className="rounded-2xl border border-white/10 bg-[#050505] p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="font-semibold text-white">{selectedServiceRow.service_name}</p>
+                          <p className="text-sm text-gray-400">
+                            {selectedServiceRow.allowed_sessions || 0} sessions allowed · {selectedServiceRow.used_sessions || 0} used
+                          </p>
+                        </div>
+                        <span className={`px-3 py-1 rounded-full text-xs font-bold ${exhausted ? 'bg-red-500/15 text-red-400' : 'bg-green-500/15 text-green-400'}`}>
+                          {exhausted ? 'Exhausted' : `${remaining} left`}
+                        </span>
+                      </div>
+
+                      <div className="mt-4 flex items-center justify-between gap-3">
+                        <p className="text-sm text-gray-500">
+                          {exhausted ? 'This service is no longer available for this member.' : 'Record one session usage for selected service.'}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => handleConsumeService(selectedServiceRow)}
+                          disabled={exhausted || !selectedMember}
+                          className="rounded-xl bg-[#C8A13A] disabled:opacity-50 disabled:cursor-not-allowed px-4 py-2 text-sm font-semibold text-black"
+                        >
+                          Use 1 session
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })()}
+              </div>
+            )}
+          </Section>
+
           <Section title="Today Summary">
             <SummaryItem icon={UserCheck} label="Current Inside" value="Live" />
             <SummaryItem icon={Clock} label="Entry Time" value={formData.check_in_time} />
@@ -349,6 +682,56 @@ export default function ManualCheckIn({ onBack }) {
       </div>
     </div>
   )
+}
+
+function getMemberPlanBenefits(member) {
+  const plan = member?.membership_plan || member?.membershipPlan || null
+  const benefits = plan?.benefits ?? member?.benefits ?? []
+
+  if (Array.isArray(benefits)) {
+    return benefits
+  }
+
+  if (typeof benefits === 'string') {
+    return benefits
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean)
+  }
+
+  return []
+}
+
+function parseServiceQuota(benefit) {
+  if (!benefit || typeof benefit !== 'string') {
+    return null
+  }
+
+  const cleaned = benefit.trim()
+  if (!cleaned) {
+    return null
+  }
+
+  const match = cleaned.match(/^(.*?)(?:\s*[:\-–—]\s*|\s+)(\d+)\s*(?:session|sessions?)$/i)
+  if (!match) {
+    return null
+  }
+
+  const serviceName = match[1].trim()
+  const allowedSessions = Number(match[2])
+
+  if (!serviceName || Number.isNaN(allowedSessions)) {
+    return null
+  }
+
+  return {
+    service_name: serviceName.replace(/\s+/g, ' '),
+    allowed_sessions: allowedSessions,
+  }
+}
+
+function getServiceKey(serviceName) {
+  return String(serviceName || '').trim().toLowerCase()
 }
 
 function Section({ title, children }) {

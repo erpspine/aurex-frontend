@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 
 import AddBanner from './pages/AddBanner'
 import AddBodyPart from './pages/AddBodyPart'
@@ -30,6 +30,7 @@ import MobileApp from './pages/MobileApp'
 import Payments from './pages/Payments'
 import Permissions from './pages/Permissions'
 import Reports from './pages/Reports'
+import ServiceUsageReport from './pages/ServiceUsageReport'
 import Settings from './pages/Settings'
 import Trainers from './pages/Trainers'
 import UsersPage from './pages/Users'
@@ -40,12 +41,80 @@ const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? '/api'
 const authTokenKey = 'aurex_admin_token'
 const authUserKey = 'aurex_admin_user'
 
+const defaultPagePermissions = {
+  dashboard: { Admin: 'Full Access', Manager: 'Full Access', Trainer: 'Full Access', Receptionist: 'Full Access' },
+  members: { Admin: 'Full Access', Manager: 'Full Access', Trainer: 'Read Only', Receptionist: 'Full Access' },
+  plans: { Admin: 'Full Access', Manager: 'Full Access', Trainer: 'No Access', Receptionist: 'No Access' },
+  trainers: { Admin: 'Full Access', Manager: 'Full Access', Trainer: 'Full Access', Receptionist: 'No Access' },
+  exercises: { Admin: 'Full Access', Manager: 'Full Access', Trainer: 'Read Only', Receptionist: 'No Access' },
+  equipment: { Admin: 'Full Access', Manager: 'Full Access', Trainer: 'No Access', Receptionist: 'No Access' },
+  workouts: { Admin: 'Full Access', Manager: 'Full Access', Trainer: 'Full Access', Receptionist: 'No Access' },
+  levels: { Admin: 'Full Access', Manager: 'Full Access', Trainer: 'No Access', Receptionist: 'No Access' },
+  diet: { Admin: 'Full Access', Manager: 'Full Access', Trainer: 'Read Only', Receptionist: 'No Access' },
+  classes: { Admin: 'Full Access', Manager: 'Full Access', Trainer: 'Read Only', Receptionist: 'Full Access' },
+  attendance: { Admin: 'Full Access', Manager: 'Full Access', Trainer: 'Read Only', Receptionist: 'Full Access' },
+  payments: { Admin: 'Full Access', Manager: 'Full Access', Trainer: 'No Access', Receptionist: 'Full Access' },
+  reports: { Admin: 'Full Access', Manager: 'Full Access', Trainer: 'No Access', Receptionist: 'No Access' },
+  users: { Admin: 'Full Access', Manager: 'No Access', Trainer: 'No Access', Receptionist: 'No Access' },
+  settings: { Admin: 'Full Access', Manager: 'No Access', Trainer: 'No Access', Receptionist: 'No Access' },
+  mobile: { Admin: 'Full Access', Manager: 'No Access', Trainer: 'No Access', Receptionist: 'No Access' },
+}
+
+const pageAccessMap = {
+  dashboard: 'dashboard',
+  members: 'members',
+  plans: 'plans',
+  trainers: 'trainers',
+  exercises: 'exercises',
+  equipment: 'equipment',
+  workouts: 'workouts',
+  levels: 'levels',
+  diet: 'diet',
+  classes: 'classes',
+  attendance: 'attendance',
+  payments: 'payments',
+  reports: 'reports',
+  'service-report': 'reports',
+  users: 'users',
+  mobile: 'mobile',
+  settings: 'settings',
+  'manual-check-in': 'attendance',
+  'add-member': 'members',
+  'edit-member': 'members',
+  'add-plan': 'plans',
+  'edit-plan': 'plans',
+  'add-payment': 'payments',
+  'add-class': 'classes',
+  'edit-class': 'classes',
+  'add-trainer': 'trainers',
+  'edit-trainer': 'trainers',
+  'add-diet': 'diet',
+  'edit-diet': 'diet',
+  'add-user': 'users',
+  'edit-user': 'users',
+  'add-exercise': 'exercises',
+  'add-body-part': 'exercises',
+  'edit-body-part': 'exercises',
+  'edit-exercise': 'exercises',
+  'add-banner': 'mobile',
+  'permissions': 'users',
+}
+
+const roleDisplayMap = {
+  admin: 'Admin',
+  manager: 'Manager',
+  trainer: 'Trainer',
+  receptionist: 'Receptionist',
+}
+
 function App() {
   const [isLoggedIn, setIsLoggedIn] = useState(
     () => Boolean(localStorage.getItem(authTokenKey)),
   )
   const [authUser, setAuthUser] = useState(() => readStoredUser())
   const [page, setPage] = useState('dashboard')
+  const [pagePermissions, setPagePermissions] = useState(defaultPagePermissions)
+  const [permissionsLoaded, setPermissionsLoaded] = useState(false)
   const [selectedPlanId, setSelectedPlanId] = useState(null)
   const [selectedMemberId, setSelectedMemberId] = useState(null)
   const [selectedEquipmentId, setSelectedEquipmentId] = useState(null)
@@ -64,6 +133,49 @@ function App() {
     setIsLoggedIn(true)
     setPage('dashboard')
   }
+
+  useEffect(() => {
+    if (!isLoggedIn) {
+      setPagePermissions(defaultPagePermissions)
+      setPermissionsLoaded(true)
+      return
+    }
+
+    let shouldUpdate = true
+
+    const loadPermissions = async () => {
+      try {
+        const response = await fetch(`${apiBaseUrl}/settings`, {
+          headers: {
+            Accept: 'application/json',
+            Authorization: `Bearer ${localStorage.getItem(authTokenKey)}`,
+          },
+        })
+
+        if (!response.ok) {
+          throw new Error('Unable to load permissions.')
+        }
+
+        const payload = await response.json()
+
+        if (shouldUpdate) {
+          setPagePermissions(mergePagePermissions(defaultPagePermissions, payload.settings?.users_roles?.page_access))
+          setPermissionsLoaded(true)
+        }
+      } catch {
+        if (shouldUpdate) {
+          setPagePermissions(defaultPagePermissions)
+          setPermissionsLoaded(true)
+        }
+      }
+    }
+
+    loadPermissions()
+
+    return () => {
+      shouldUpdate = false
+    }
+  }, [isLoggedIn])
 
   const handleLogout = useCallback(async () => {
     const token = localStorage.getItem(authTokenKey)
@@ -94,8 +206,14 @@ function App() {
   }
 
   const memberMode = isMemberUser(authUser)
+  const currentRole = getUserRole(authUser)
   const navigate = (nextPage) => {
     if (memberMode && !['dashboard', 'workouts'].includes(nextPage)) {
+      setPage('dashboard')
+      return
+    }
+
+    if (permissionsLoaded && !hasPageAccess(nextPage, currentRole, pagePermissions)) {
       setPage('dashboard')
       return
     }
@@ -117,12 +235,16 @@ function App() {
     )
   }
 
+  if (permissionsLoaded && page !== 'dashboard' && !hasPageAccess(page, currentRole, pagePermissions)) {
+    return <Dashboard onNavigate={navigate} onLogout={handleLogout} />
+  }
+
   if (page === 'members') {
     return (
       <Members
         onNavigate={(nextPage, memberId = null) => {
           setSelectedMemberId(memberId)
-          setPage(nextPage)
+          navigate(nextPage)
         }}
         onLogout={handleLogout}
       />
@@ -134,7 +256,7 @@ function App() {
       <MembershipPlans
         onNavigate={(nextPage, planId = null) => {
           setSelectedPlanId(planId)
-          setPage(nextPage)
+          navigate(nextPage)
         }}
         onLogout={handleLogout}
       />
@@ -332,7 +454,7 @@ function App() {
       <Exercises
         onNavigate={(nextPage, exerciseId = null) => {
           setSelectedExerciseId(exerciseId)
-          setPage(nextPage)
+          navigate(nextPage)
         }}
         onLogout={handleLogout}
       />
@@ -344,7 +466,7 @@ function App() {
       <BodyParts
         onNavigate={(nextPage, bodyPartId = null) => {
           setSelectedBodyPartId(bodyPartId)
-          setPage(nextPage)
+          navigate(nextPage)
         }}
         onLogout={handleLogout}
       />
@@ -356,7 +478,7 @@ function App() {
       <Equipment
         onNavigate={(nextPage, equipmentId = null) => {
           setSelectedEquipmentId(equipmentId)
-          setPage(nextPage)
+          navigate(nextPage)
         }}
         onLogout={handleLogout}
       />
@@ -385,7 +507,7 @@ function App() {
       <WorkoutLevels
         onNavigate={(nextPage, levelId = null) => {
           setSelectedLevelId(levelId)
-          setPage(nextPage)
+          navigate(nextPage)
         }}
         onLogout={handleLogout}
       />
@@ -395,7 +517,7 @@ function App() {
   if (page === 'attendance') {
     return (
       <Attendance
-        onNavigate={setPage}
+        onNavigate={navigate}
         onLogout={handleLogout}
       />
     )
@@ -404,7 +526,7 @@ function App() {
   if (page === 'payments') {
     return (
       <Payments
-        onNavigate={setPage}
+        onNavigate={navigate}
         onLogout={handleLogout}
       />
     )
@@ -413,7 +535,7 @@ function App() {
   if (page === 'mobile') {
     return (
       <MobileApp
-        onNavigate={setPage}
+        onNavigate={navigate}
         onLogout={handleLogout}
       />
     )
@@ -422,7 +544,16 @@ function App() {
   if (page === 'reports') {
     return (
       <Reports
-        onNavigate={setPage}
+        onNavigate={navigate}
+        onLogout={handleLogout}
+      />
+    )
+  }
+
+  if (page === 'service-report') {
+    return (
+      <ServiceUsageReport
+        onNavigate={navigate}
         onLogout={handleLogout}
       />
     )
@@ -433,7 +564,7 @@ function App() {
       <Classes
         onNavigate={(nextPage, classId = null) => {
           setSelectedClassId(classId)
-          setPage(nextPage)
+          navigate(nextPage)
         }}
         onLogout={handleLogout}
       />
@@ -447,7 +578,7 @@ function App() {
   if (page === 'settings') {
     return (
       <Settings
-        onNavigate={setPage}
+        onNavigate={navigate}
         onLogout={handleLogout}
       />
     )
@@ -458,7 +589,7 @@ function App() {
       <Trainers
         onNavigate={(nextPage, trainerId = null) => {
           setSelectedTrainerId(trainerId)
-          setPage(nextPage)
+          navigate(nextPage)
         }}
         onLogout={handleLogout}
       />
@@ -470,7 +601,7 @@ function App() {
       <Diet
         onNavigate={(nextPage, dietId = null) => {
           setSelectedDietId(dietId)
-          setPage(nextPage)
+          navigate(nextPage)
         }}
         onLogout={handleLogout}
       />
@@ -480,7 +611,7 @@ function App() {
   if (page === 'users') {
     return (
       <UsersPage
-        onNavigate={setPage}
+        onNavigate={navigate}
         onLogout={handleLogout}
       />
     )
@@ -505,6 +636,33 @@ function readStoredUser() {
   } catch {
     return null
   }
+}
+
+function getUserRole(user) {
+  const roleValue = String(user?.role || user?.user_type || '').trim().toLowerCase()
+  return roleDisplayMap[roleValue] || 'Admin'
+}
+
+function mergePagePermissions(defaultPermissions, incomingPermissions) {
+  if (!incomingPermissions || typeof incomingPermissions !== 'object') {
+    return defaultPermissions
+  }
+
+  return Object.fromEntries(
+    Object.entries(defaultPermissions).map(([pageKey, roleMap]) => [
+      pageKey,
+      {
+        ...roleMap,
+        ...(incomingPermissions[pageKey] || {}),
+      },
+    ]),
+  )
+}
+
+function hasPageAccess(pageId, role, pagePermissions) {
+  const pageKey = pageAccessMap[pageId] || pageId
+  const access = pagePermissions?.[pageKey]?.[role] || 'Full Access'
+  return access !== 'No Access'
 }
 
 function isMemberUser(user) {
