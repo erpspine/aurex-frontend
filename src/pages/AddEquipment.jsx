@@ -37,6 +37,8 @@ const emptyEquipment = {
   maintenance_priority: 'Low',
   description: '',
   safety_instructions: '',
+  image_url: '',
+  image_file: null,
   operation_video_url: '',
   operation_video_file: null,
   show_in_mobile_app: true,
@@ -95,6 +97,8 @@ export default function AddEquipment({ onBack, equipmentId = null }) {
           maintenance_priority: equipment.maintenance_priority || 'Low',
           description: equipment.description || '',
           safety_instructions: equipment.safety_instructions || '',
+          image_url: equipment.image_url || '',
+          image_file: null,
           operation_video_url: equipment.operation_video_url || '',
           operation_video_file: null,
           show_in_mobile_app: Boolean(equipment.show_in_mobile_app),
@@ -129,6 +133,8 @@ export default function AddEquipment({ onBack, equipmentId = null }) {
       [field]: value,
     }))
   }
+
+  const imagePreviewUrl = useVideoPreview(formData.image_file, formData.image_url)
 
   const videoPreviewUrl = useVideoPreview(
     formData.operation_video_file,
@@ -175,6 +181,8 @@ export default function AddEquipment({ onBack, equipmentId = null }) {
         show_in_mobile_app: formData.show_in_mobile_app ? '1' : '0',
       }
 
+      delete payloadFields.image_url
+      delete payloadFields.image_file
       delete payloadFields.operation_video_url
       delete payloadFields.operation_video_file
 
@@ -185,6 +193,10 @@ export default function AddEquipment({ onBack, equipmentId = null }) {
       Object.entries(payloadFields).forEach(([key, value]) => {
         payloadData.append(key, value)
       })
+
+      if (formData.image_file) {
+        payloadData.append('image_file', formData.image_file)
+      }
 
       if (formData.operation_video_file) {
         payloadData.append('operation_video_file', formData.operation_video_file)
@@ -488,7 +500,11 @@ export default function AddEquipment({ onBack, equipmentId = null }) {
 
           <div className="space-y-6">
             <Section title="Equipment Image">
-              <UploadBox title="Upload Equipment Photo" desc="PNG / JPG / WEBP" />
+              <UploadBox
+                file={formData.image_file}
+                onChange={(file) => updateField('image_file', file)}
+              />
+              {imagePreviewUrl && <img src={imagePreviewUrl} alt="Equipment preview" className="mt-4 w-full h-48 object-contain rounded-2xl" />}
             </Section>
 
             <Section title="Mobile App Settings">
@@ -630,13 +646,14 @@ function TextArea({ label, placeholder, value, onChange }) {
   )
 }
 
-function UploadBox({ title, desc }) {
+function UploadBox({ file, onChange }) {
   return (
-    <div className="h-44 rounded-3xl bg-[#050505] border border-dashed border-[#C8A13A]/40 flex flex-col items-center justify-center text-center">
+    <label className="relative h-44 rounded-3xl bg-[#050505] border border-dashed border-[#C8A13A]/40 flex flex-col items-center justify-center text-center cursor-pointer focus-within:ring-2 focus-within:ring-[#C8A13A]">
       <Upload size={34} className="text-[#C8A13A]" />
-      <h4 className="font-bold mt-3">{title}</h4>
-      <p className="text-gray-500 text-sm mt-1">{desc}</p>
-    </div>
+      <h4 className="font-bold mt-3">{file ? file.name : 'Upload Equipment Photo'}</h4>
+      <p className="text-gray-500 text-sm mt-1">PNG / JPG / WEBP · Maximum 5 MB</p>
+      <input type="file" aria-label="Upload Equipment Photo" accept="image/png,image/jpeg,image/webp" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onChange={(event) => onChange(event.target.files?.[0] || null)} />
+    </label>
   )
 }
 
@@ -675,7 +692,7 @@ function VideoPreview({ url }) {
         <Video size={34} className="text-[#C8A13A]" />
         <h4 className="font-bold mt-3">No video added</h4>
         <p className="text-gray-500 text-sm mt-1">
-          Paste a video URL above to preview the operation guide.
+          Choose a video above to preview the operation guide.
         </p>
       </div>
     )

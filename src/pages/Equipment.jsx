@@ -475,7 +475,7 @@ export default function Equipment({ onNavigate, onLogout }) {
                 className="bg-[#111] border border-white/10 rounded-3xl overflow-hidden hover:border-[#C8A13A]/60 transition"
               >
                 <div className="h-44 bg-gradient-to-br from-[#151515] to-black flex items-center justify-center relative">
-                  <Settings size={70} className="text-[#C8A13A]" />
+                  <EquipmentImage key={item.image_url || 'no-image'} url={item.image_url} name={item.name} />
 
                   <span
                     className={`absolute top-4 right-4 px-3 py-1 rounded-full text-xs font-bold ${
@@ -519,6 +519,24 @@ export default function Equipment({ onNavigate, onLogout }) {
         )}
       </main>
     </div>
+  )
+}
+
+function EquipmentImage({ url, name }) {
+  const [failed, setFailed] = useState(false)
+
+  if (!url || failed) {
+    return <Settings size={70} className="text-[#C8A13A]" />
+  }
+
+  return (
+    <img
+      src={url}
+      alt={name}
+      loading="lazy"
+      className="w-full h-full object-contain"
+      onError={() => setFailed(true)}
+    />
   )
 }
 
