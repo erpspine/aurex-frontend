@@ -3,6 +3,8 @@ import Swal from 'sweetalert2'
 
 import { Dumbbell, Eye, Lock, Mail } from 'lucide-react'
 
+import PasswordReset from './PasswordReset'
+
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? '/api'
 
 const verificationParams = new URLSearchParams(window.location.search)
@@ -18,6 +20,7 @@ export default function Login({ onLogin }) {
   const [verificationRequired, setVerificationRequired] = useState(verificationFromLink)
   const [verificationCode, setVerificationCode] = useState('')
   const [resendAfter, setResendAfter] = useState(0)
+  const [showReset, setShowReset] = useState(false)
 
   useEffect(() => {
     if (resendAfter <= 0) return undefined
@@ -176,6 +179,17 @@ export default function Login({ onLogin }) {
             </p>
           </div>
 
+          {showReset ? (
+            <PasswordReset
+              initialEmail={email}
+              onDone={(resetEmail) => {
+                setEmail(resetEmail)
+                setPassword('')
+                setShowReset(false)
+              }}
+            />
+          ) : (
+          <>
           <h2 className="text-4xl font-bold mb-2">{verificationRequired ? 'Verify Your Email' : 'Welcome Back'}</h2>
           <p className="text-gray-400 mb-10">
             {verificationRequired ? 'Enter the 6-digit code sent to your email before logging in.' : 'Login to manage your gym and mobile app.'}
@@ -240,7 +254,11 @@ export default function Login({ onLogin }) {
                 Remember me
               </label>
 
-              <button type="button" className="text-[#C8A13A] hover:underline">
+              <button
+                type="button"
+                onClick={() => setShowReset(true)}
+                className="text-[#C8A13A] hover:underline"
+              >
                 Forgot password?
               </button>
             </div>}
@@ -260,6 +278,8 @@ export default function Login({ onLogin }) {
               {resendAfter > 0 ? `Resend in ${resendAfter}s` : 'Resend code'}
             </button>
           </div>}
+          </>
+          )}
 
           <p className="text-center text-gray-500 text-sm mt-10">
             Secure admin access only
