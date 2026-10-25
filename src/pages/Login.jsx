@@ -1,16 +1,74 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Swal from 'sweetalert2'
 
 import { Dumbbell, Eye, Lock, Mail } from 'lucide-react'
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? '/api'
 
+const verificationParams = new URLSearchParams(window.location.search)
+const verificationEmailFromLink = verificationParams.get('email') || ''
+const verificationFromLink = verificationParams.get('verify') === '1' || window.location.pathname === '/verify-email'
+
 export default function Login({ onLogin }) {
   const [email, setEmail] = useState(
-    import.meta.env.DEV ? 'admin@aurex.local' : '',
+    verificationEmailFromLink || (import.meta.env.DEV ? 'admin@aurex.local' : ''),
   )
   const [password, setPassword] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [verificationRequired, setVerificationRequired] = useState(verificationFromLink)
+  const [verificationCode, setVerificationCode] = useState('')
+  const [resendAfter, setResendAfter] = useState(0)
+
+  useEffect(() => {
+    if (resendAfter <= 0) return undefined
+    const timer = window.setInterval(() => {
+      setResendAfter((seconds) => Math.max(0, seconds - 1))
+    }, 1000)
+    return () => window.clearInterval(timer)
+  }, [resendAfter])
+
+  const showVerification = (payload) => {
+    setVerificationRequired(true)
+    setVerificationCode('')
+    setResendAfter(Number(payload.retry_after || 0))
+  }
+
+  const verifyEmail = async (event) => {
+    event.preventDefault()
+    setIsSubmitting(true)
+
+    try {
+      const response = await fetch(`${apiBaseUrl}/email/verify`, {
+        method: 'POST',
+        headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, code: verificationCode }),
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        const message = payload.errors ? Object.values(payload.errors).flat().join(' ') : payload.message
+        throw new Error(message || 'Unable to verify your email.')
+      }
+      setVerificationRequired(false)
+      setVerificationCode('')
+      await Swal.fire({ title: 'Email verified', text: 'You can now log in with your password.', icon: 'success', background: '#101010', color: '#ffffff', confirmButtonColor: '#C8A13A' })
+    } catch (caughtError) {
+      await Swal.fire({ title: 'Verification failed', text: caughtError.message || 'Unable to verify your email.', icon: 'error', background: '#101010', color: '#ffffff', confirmButtonColor: '#C8A13A' })
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const resendCode = async () => {
+    if (resendAfter > 0) return
+    const response = await fetch(`${apiBaseUrl}/email/resend`, {
+      method: 'POST',
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+    })
+    const payload = await response.json().catch(() => ({}))
+    if (!response.ok) throw new Error(payload.message || 'Unable to resend the verification code.')
+    setResendAfter(Number(payload.retry_after || 60))
+  }
 
   const handleSubmit = async (event) => {
     event.preventDefault()
@@ -40,6 +98,10 @@ export default function Login({ onLogin }) {
       }
 
       if (!response.ok) {
+        if (payload.verification_required) {
+          showVerification(payload)
+          return
+        }
         const validationMessage = payload.errors
           ? Object.values(payload.errors).flat().join(' ')
           : payload.message
@@ -114,16 +176,16 @@ export default function Login({ onLogin }) {
             </p>
           </div>
 
-          <h2 className="text-4xl font-bold mb-2">Welcome Back</h2>
+          <h2 className="text-4xl font-bold mb-2">{verificationRequired ? 'Verify Your Email' : 'Welcome Back'}</h2>
           <p className="text-gray-400 mb-10">
-            Login to manage your gym and mobile app.
+            {verificationRequired ? 'Enter the 6-digit code sent to your email before logging in.' : 'Login to manage your gym and mobile app.'}
           </p>
 
           <form
             className="space-y-6"
-            onSubmit={handleSubmit}
+            onSubmit={verificationRequired ? verifyEmail : handleSubmit}
           >
-            <div>
+            {!verificationRequired && <div>
               <label className="text-sm text-gray-300 mb-2 block">
                 Email Address
               </label>
@@ -137,9 +199,25 @@ export default function Login({ onLogin }) {
                   className="w-full bg-transparent outline-none px-4 py-4 text-white placeholder-gray-600"
                 />
               </div>
-            </div>
+            </div>}
 
-            <div>
+            {verificationRequired && <div>
+              <div className="mb-4 rounded-xl border border-white/10 bg-[#121212] px-4 py-3 text-sm text-gray-400">Verification email: <span className="text-white">{email}</span></div>
+              <label className="text-sm text-gray-300 mb-2 block">Verification Code</label>
+              <input
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                maxLength={6}
+                pattern="[0-9]{6}"
+                required
+                value={verificationCode}
+                onChange={(event) => setVerificationCode(event.target.value.replace(/\D/g, '').slice(0, 6))}
+                className="w-full bg-[#121212] border border-white/10 rounded-2xl px-4 py-4 text-white tracking-[0.5em] text-center text-2xl outline-none"
+                placeholder="000000"
+              />
+            </div>}
+
+            {!verificationRequired && <div>
               <label className="text-sm text-gray-300 mb-2 block">
                 Password
               </label>
@@ -154,9 +232,9 @@ export default function Login({ onLogin }) {
                 />
                 <Eye className="text-gray-500" size={20} />
               </div>
-            </div>
+            </div>}
 
-            <div className="flex justify-between items-center gap-4 text-sm">
+            {!verificationRequired && <div className="flex justify-between items-center gap-4 text-sm">
               <label className="flex items-center gap-2 text-gray-400">
                 <input type="checkbox" className="accent-[#C8A13A]" />
                 Remember me
@@ -165,16 +243,23 @@ export default function Login({ onLogin }) {
               <button type="button" className="text-[#C8A13A] hover:underline">
                 Forgot password?
               </button>
-            </div>
+            </div>}
 
             <button
               type="submit"
               disabled={isSubmitting}
               className="w-full bg-[#C8A13A] text-black font-bold py-4 rounded-2xl hover:bg-[#d8b44a] transition"
             >
-              {isSubmitting ? 'Logging in...' : 'Login to Dashboard'}
+              {isSubmitting ? (verificationRequired ? 'Verifying...' : 'Logging in...') : (verificationRequired ? 'Verify Email' : 'Login to Dashboard')}
             </button>
           </form>
+
+          {verificationRequired && <div className="mt-5 flex justify-between text-sm">
+            <button type="button" onClick={() => setVerificationRequired(false)} className="text-gray-400 hover:text-white">Back to login</button>
+            <button type="button" onClick={() => resendCode().catch((error) => Swal.fire({ title: 'Unable to resend', text: error.message, icon: 'error', background: '#101010', color: '#ffffff', confirmButtonColor: '#C8A13A' }))} disabled={resendAfter > 0} className="text-[#C8A13A] disabled:text-gray-600">
+              {resendAfter > 0 ? `Resend in ${resendAfter}s` : 'Resend code'}
+            </button>
+          </div>}
 
           <p className="text-center text-gray-500 text-sm mt-10">
             Secure admin access only
